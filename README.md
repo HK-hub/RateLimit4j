@@ -1,206 +1,199 @@
 # RateLimit4j Boot Starter
 
-一个开箱即用的Java限流工具箱，同时支持本地和分布式限流。
+一个开箱即用的Java限流工具框架，支持本地和分布式限流，提供完整的限流算法实现。
 
 ## 功能特性
 
-- 支持本地限流（基于内存）
-- 支持分布式限流（基于Redis）
-- 多种限流算法：令牌桶、漏桶、固定窗口、滑动窗口
-- Spring Boot自动配置
-- 注解驱动的限流方式
-- 可扩展的自定义限流策略
-- 高可用设计，支持集群环境
+- **多种限流算法**：令牌桶、漏桶、固定窗口、滑动窗口日志、滑动窗口计数器
+- **双模式支持**：本地限流（基于内存）和分布式限流（基于Redis）
+- **注解驱动**：通过`@RateLimit`注解实现声明式限流
+- **SpEL表达式**：支持从方法参数中提取限流Key
+- **熔断保护**：内置熔断器，防止分布式存储故障影响业务
+- **OpenTelemetry集成**：完整的监控追踪支持
+- **高可配置**：灵活的YAML配置，支持多规则定义
+- **Spring Boot Starter**：自动配置，开箱即用
 
-## 架构设计
-
-### 核心组件
-
-1. **RateLimiter接口** - 限流器抽象接口
-2. **LocalRateLimiter** - 本地限流实现
-3. **DistributedRateLimiter** - 分布式限流实现
-4. **AlgorithmFactory** - 限流算法工厂
-5. **RateLimitAspect** - 切面处理注解限流
-6. **ConfigurationProperties** - 配置属性绑定
-
-### 模块划分
-
-```
-ratelimit4j-core           // 核心接口和抽象类
-ratelimit4j-local          // 本地限流实现
-ratelimit4j-redis          // Redis分布式限流实现
-ratelimit4j-spring-boot-starter // Spring Boot Starter
-```
-
-## 核心算法设计
-
-### 1. 令牌桶算法 (Token Bucket)
-
-- 以固定速率向桶中添加令牌
-- 请求需要获取令牌才能通过
-- 桶满时丢弃多余令牌
-- 支持突发流量处理
-
-### 2. 漏桶算法 (Leaky Bucket)
-
-- 固定速率流出请求
-- 平滑输出请求流量
-- 缓冲区满时拒绝新请求
-
-### 3. 固定窗口计数器 (Fixed Window Counter)
-
-- 将时间划分为固定大小窗口
-- 在每个窗口内统计请求数量
-- 超过阈值则拒绝请求
-
-### 4. 滑动窗口日志 (Sliding Window Log)
-
-- 记录每次请求的时间戳
-- 统计最近时间窗口内的请求数
-- 精确控制请求速率
-
-### 5. 滑动窗口计数器 (Sliding Window Counter)
-
-- 结合多个固定窗口
-- 使用加权平均计算当前窗口请求数
-- 平衡精度与性能
-
-## 高可用设计
-
-### 容错机制
-
-- 本地缓存兜底：Redis不可用时自动降级到本地限流
-- 熔断保护：防止因限流服务异常影响主业务流程
-- 异常隔离：限流异常不影响业务逻辑执行
-
-### 集群支持
-
-- Redis集群模式支持
-- 数据分片存储
-- 节点故障自动转移
-
-### 性能优化
-
-- 最小化网络IO操作
-- 连接池管理
-- 批量操作支持
-- 异步处理非关键路径
-
-## 功能需求分析
-
-### 基础功能
-
-- [ ] 支持多种限流算法
-- [ ] 支持本地和分布式两种模式
-- [ ] 提供编程式和声明式(注解)使用方式
-- [ ] 支持自定义限流规则
-- [ ] 提供详细的监控指标
-
-### 高级功能
-
-- [ ] 动态配置更新
-- [ ] 多维度限流（用户、IP、接口等）
-- [ ] 黑白名单机制
-- [ ] 流量整形
-- [ ] 自适应限流
-
-### 非功能性需求
-
-- [ ] 高性能低延迟
-- [ ] 高可用性和容错能力
-- [ ] 易于集成和使用
-- [ ] 完善的文档和示例
-
-## 使用指南
+## 快速开始
 
 ### Maven依赖
 
 ```xml
 <dependency>
-    <groupId>com.example</groupId>
+    <groupId>com.geek.ratelimit</groupId>
     <artifactId>ratelimit4j-spring-boot-starter</artifactId>
     <version>1.0.0</version>
 </dependency>
 ```
 
-### 配置文件
+### 基础配置
 
 ```yaml
 ratelimit4j:
-  # 启用限流
   enabled: true
-  # 默认限流模式: local | redis
-  default-mode: local
-  # Redis配置（分布式限流时需要）
-  redis:
-    host: localhost
-    port: 6379
-    timeout: 2000
-  # 默认限流规则
+  default-mode: LOCAL
   default-rule:
-    # 限流算法: token_bucket | leaky_bucket | fixed_window | sliding_window
     algorithm: token_bucket
-    # 限流速率（每秒允许的请求数）
     rate: 100
-    # 限流周期（秒）
     period: 1
-```
-
-### 编程式使用
-
-```java
-@Autowired
-private RateLimiter rateLimiter;
-
-public void someMethod() {
-    if (rateLimiter.tryAcquire()) {
-        // 执行业务逻辑
-    } else {
-        // 处理限流情况
-        throw new RateLimitException("Too many requests");
-    }
-}
 ```
 
 ### 注解式使用
 
 ```java
-@RateLimit(rate = 100, period = 1, algorithm = "token_bucket")
-public String apiEndpoint() {
-    return "Hello World";
+@RestController
+public class ApiController {
+
+    @RateLimit(rate = 100, period = 1, algorithm = AlgorithmType.TOKEN_BUCKET)
+    public String index() {
+        return "Hello World";
+    }
+
+    @RateLimit(keyExpression = "#user.id", rate = 50, period = 60,
+                algorithm = AlgorithmType.SLIDING_WINDOW_COUNTER)
+    public String userApi(User user) {
+        return "User API";
+    }
+
+    @RateLimit(rate = 10, fallbackMethod = "fallback")
+    public String apiWithFallback() {
+        return "Success";
+    }
+
+    public String fallback() {
+        return "Rate limited, please try again later";
+    }
 }
 ```
 
-## 开发计划
+## 限流算法
 
-### 第一阶段：核心功能实现
+| 算法 | 特点 | 适用场景 |
+|------|------|----------|
+| 令牌桶 (TOKEN_BUCKET) | 允许突发流量，恒定补充令牌 | API接口、间歇性流量 |
+| 漏桶 (LEAKY_BUCKET) | 恒定流出速率，平滑流量 | 需要稳定流速的场景 |
+| 固定窗口 (FIXED_WINDOW) | 简单高效，有临界问题 | 简单限流、对精度要求不高 |
+| 滑动窗口日志 (SLIDING_WINDOW_LOG) | 精确控制，内存开销大 | 需要精确限流的场景 |
+| 滑动窗口计数器 (SLIDING_WINDOW_COUNTER) | 平衡精度与性能 | 一般限流场景 |
 
-- [ ] 完成核心接口设计
-- [ ] 实现本地限流功能
-- [ ] 实现Redis分布式限流
-- [ ] 完成Spring Boot Starter集成
+## 配置说明
 
-### 第二阶段：算法完善
+### 完整配置示例
 
-- [ ] 实现所有限流算法
-- [ ] 添加算法性能测试
-- [ ] 优化算法实现细节
+```yaml
+ratelimit4j:
+  enabled: true
+  default-mode: LOCAL
 
-### 第三阶段：高级特性
+  default-rule:
+    algorithm: token_bucket
+    rate: 100
+    period: 1
+    key-prefix: ""
+    max-burst: 100
 
-- [ ] 实现动态配置更新
-- [ ] 添加监控指标暴露
-- [ ] 完善异常处理机制
+  rules:
+    api-user:
+      algorithm: sliding_window_counter
+      rate: 50
+      period: 60
+      key-prefix: "user:api"
+    api-ip:
+      algorithm: fixed_window
+      rate: 200
+      period: 1
+      key-prefix: "ip:api"
 
-### 第四阶段：质量保证
+  redis:
+    host: localhost
+    port: 6379
+    password: ""
+    database: 0
+    timeout: 2000
 
-- [ ] 编写单元测试
-- [ ] 进行性能测试
-- [ ] 完善文档和示例
+  fallback:
+    enabled: true
+    degrade-to-local: true
+    failure-threshold: 5
+    recovery-timeout: 30000
 
-## 贡献指南
+  telemetry:
+    enabled: true
+    service-name: "RateLimit4j"
+    endpoint: "http://localhost:4317"
+```
 
-欢迎提交Issue和Pull Request来改进这个项目。
+### 配置项说明
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `enabled` | 是否启用限流 | true |
+| `default-mode` | 默认限流模式 (LOCAL/DISTRIBUTED) | LOCAL |
+| `default-rule.algorithm` | 默认算法 | token_bucket |
+| `default-rule.rate` | 每周期请求数 | 100 |
+| `default-rule.period` | 周期（秒） | 1 |
+| `default-rule.max-burst` | 最大突发容量 | 100 |
+| `fallback.degrade-to-local` | Redis故障时降级到本地限流 | true |
+| `fallback.failure-threshold` | 熔断失败次数阈值 | 5 |
+| `fallback.recovery-timeout` | 熔断恢复时间（毫秒） | 30000 |
+
+## @RateLimit注解参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `algorithm` | 限流算法 | TOKEN_BUCKET |
+| `rate` | 每周期请求数 | 100 |
+| `period` | 周期（秒） | 1 |
+| `keyPrefix` | Key前缀 | "" |
+| `keyExpression` | SpEL表达式 | "" |
+| `fallbackMethod` | 降级方法名 | "" |
+| `exceptionClass` | 异常类型 | RateLimitException |
+| `maxBurst` | 最大突发容量 | 0(使用rate) |
+| `enabled` | 是否启用 | true |
+
+### SpEL表达式示例
+
+```java
+// 用户ID维度
+@RateLimit(keyExpression = "#user.id", rate = 50)
+
+// IP地址维度
+@RateLimit(keyExpression = "#request.remoteAddr", rate = 100)
+
+// Header维度
+@RateLimit(keyExpression = "#request.getHeader('X-Token')", rate = 200)
+
+// 组合Key
+@RateLimit(keyExpression = "#user.id + ':' + #request.requestURI", rate = 30)
+```
+
+## 监控指标
+
+OpenTelemetry集成后暴露以下指标：
+
+| 指标名称 | 类型 | 说明 |
+|----------|------|------|
+| `ratelimit.requests.total` | Counter | 总请求计数 |
+| `ratelimit.requests.allowed` | Counter | 允许通过数 |
+| `ratelimit.requests.rejected` | Counter | 被限流数 |
+| `ratelimit.algorithm.latency` | Histogram | 算法执行延迟 |
+
+## 模块结构
+
+```
+RateLimit4j/
+├── ratelimit4j-core           // 核心接口和抽象类
+├── ratelimit4j-local          // 本地限流实现
+├── ratelimit4j-redis          // Redis分布式限流实现
+├── ratelimit4j-spring-boot-starter  // Spring Boot自动配置
+```
+
+## 技术栈
+
+- Java 17+
+- Spring Boot 3.x
+- Redisson 3.45.x
+- Apache Commons Lang3
+- OpenTelemetry SDK
 
 ## 许可证
 

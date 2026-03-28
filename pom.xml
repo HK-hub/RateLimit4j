@@ -10,15 +10,22 @@
     <packaging>pom</packaging>
 
     <modules>
+        <module>ratelimit4j-core</module>
+        <module>ratelimit4j-local</module>
+        <module>ratelimit4j-redis</module>
+        <module>ratelimit4j-spring-boot-starter</module>
     </modules>
 
     <properties>
         <revision>1.0.0</revision>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring.boot.version>3.5.5</spring.boot.version>
         <guava.version>33.4.8-jre</guava.version>
+        <redisson.version>3.45.1</redisson.version>
+        <commons-lang3.version>3.17.0</commons-lang3.version>
+        <opentelemetry.version>1.47.0</opentelemetry.version>
     </properties>
 
     <repositories>
@@ -45,6 +52,45 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- 内部模块依赖 -->
+            <dependency>
+                <groupId>com.geek.ratelimit</groupId>
+                <artifactId>ratelimit4j-core</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.geek.ratelimit</groupId>
+                <artifactId>ratelimit4j-local</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.geek.ratelimit</groupId>
+                <artifactId>ratelimit4j-redis</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <!-- Redisson 分布式锁和数据结构 -->
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-boot-starter</artifactId>
+                <version>${redisson.version}</version>
+            </dependency>
+            <!-- Apache Commons Lang3 工具类 -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>${commons-lang3.version}</version>
+            </dependency>
+            <!-- OpenTelemetry SDK -->
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-api</artifactId>
+                <version>${opentelemetry.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-sdk</artifactId>
+                <version>${opentelemetry.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -54,10 +100,37 @@
             <artifactId>lombok</artifactId>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <!-- Maven 编译器插件 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                </configuration>
+            </plugin>
+            <!-- Maven Surefire 插件 (JUnit 5 支持) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
             <!-- 需要这个插件来支持revision属性 -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

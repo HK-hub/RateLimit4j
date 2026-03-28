@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.geek.ratelimit</groupId>
+    <artifactId>RateLimit4j</artifactId>
+    <version>1.0.0</version>
+  </parent>
+  <groupId>com.geek.ratelimit</groupId>
+  <artifactId>ratelimit4j-local</artifactId>
+  <version>1.0.0</version>
+  <name>RateLimit4j Local</name>
+  <description>RateLimit4j本地限流模块，实现基于内存的5种限流算法</description>
+  <dependencies>
+    <dependency>
+      <groupId>com.geek.ratelimit</groupId>
+      <artifactId>ratelimit4j-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
