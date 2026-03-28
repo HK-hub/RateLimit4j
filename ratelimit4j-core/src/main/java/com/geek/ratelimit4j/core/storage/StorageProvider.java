@@ -1,5 +1,8 @@
 package com.geek.ratelimit4j.core.storage;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -141,7 +144,9 @@ public interface StorageProvider {
 
     /**
      * 存储健康状态
+     * 使用Lombok简化getter方法
      */
+    @Getter
     class StorageHealth {
         private final boolean healthy;
         private final String message;
@@ -160,22 +165,6 @@ public interface StorageProvider {
             this.message = message;
             this.lastCheckTimestamp = System.currentTimeMillis();
             this.details = Objects.nonNull(details) ? details : new java.util.HashMap<>();
-        }
-
-        public boolean isHealthy() {
-            return this.healthy;
-        }
-
-        public String getMessage() {
-            return this.message;
-        }
-
-        public long getLastCheckTimestamp() {
-            return this.lastCheckTimestamp;
-        }
-
-        public Map<String, Object> getDetails() {
-            return this.details;
         }
 
         public Object getDetail(String key) {
