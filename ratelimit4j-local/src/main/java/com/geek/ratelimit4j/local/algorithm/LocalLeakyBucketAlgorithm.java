@@ -2,7 +2,7 @@ package com.geek.ratelimit4j.local.algorithm;
 
 import com.geek.ratelimit4j.core.algorithm.AlgorithmType;
 import com.geek.ratelimit4j.core.algorithm.RateLimitAlgorithm;
-import com.geek.ratelimit4j.core.algorithm.RateLimitContext;
+import com.geek.ratelimit4j.core.config.RateLimitContext;
 import com.geek.ratelimit4j.core.algorithm.RateLimitResult;
 import com.geek.ratelimit4j.core.config.ModeType;
 import com.geek.ratelimit4j.core.config.RateLimitConfig;

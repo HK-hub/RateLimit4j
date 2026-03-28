@@ -1,5 +1,7 @@
 package com.geek.ratelimit4j.core.algorithm;
 
+import com.geek.ratelimit4j.core.config.RateLimitContext;
+
 /**
  * 限流算法接口
  * 定义算法的核心执行方法，所有限流算法实现必须遵循此接口

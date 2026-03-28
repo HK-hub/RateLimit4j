@@ -1,6 +1,10 @@
 package com.geek.ratelimit4j.starter.annotation;
 
 import com.geek.ratelimit4j.core.algorithm.AlgorithmType;
+import com.geek.ratelimit4j.starter.handler.DefaultFallbackHandler;
+import com.geek.ratelimit4j.starter.handler.FallbackHandler;
+import com.geek.ratelimit4j.starter.resolver.KeyBuilder;
+import com.geek.ratelimit4j.starter.resolver.SpelKeyBuilder;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -13,18 +17,28 @@ import java.lang.annotation.Target;
  *
  * <p>使用示例：</p>
  * <pre>{@code
- * @RateLimit(rate = 100, period = 1, algorithm = AlgorithmType.TOKEN_BUCKET)
+ * // 基础使用
+ * @RateLimit(rate = 100, period = 1)
  * public String apiEndpoint() {
  *     return "Hello World";
  * }
  *
- * @RateLimit(keyExpression = "#user.id", rate = 50, fallbackMethod = "fallback")
- * public String userApi(User user) {
+ * // 多Key维度限流（支持SpEL表达式）
+ * @RateLimit(keys = {"#user.id", "#request.remoteAddr"}, rate = 50)
+ * public String userApi(User user, HttpServletRequest request) {
  *     return "Success";
  * }
  *
- * public String fallback(User user) {
- *     return "Rate limited";
+ * // 自定义Key构建器
+ * @RateLimit(keyBuilder = UserKeyBuilder.class, rate = 100)
+ * public String customKeyApi(User user) {
+ *     return "Success";
+ * }
+ *
+ * // 自定义降级处理器
+ * @RateLimit(rate = 10, fallbackHandler = CustomFallbackHandler.class)
+ * public String apiWithFallback() {
+ *     return "Success";
  * }
  * }</pre>
  *
@@ -57,6 +71,21 @@ public @interface RateLimit {
     int period() default 1;
 
     /**
+     * 限流Key数组（支持SpEL表达式）
+     * 多个Key会被组合使用，支持从方法参数中提取用户ID、IP等维度
+     *
+     * <p>表达式示例：</p>
+     * <ul>
+     *   <li>#user.id - 提取用户ID</li>
+     *   <li>#request.remoteAddr - 提取IP地址</li>
+     *   <li>#request.getHeader('X-Token') - 提取Header</li>
+     * </ul>
+     *
+     * @return Key表达式数组
+     */
+    String[] keys() default {};
+
+    /**
      * 限流Key前缀
      *
      * @return Key前缀
@@ -64,28 +93,20 @@ public @interface RateLimit {
     String keyPrefix() default "";
 
     /**
-     * 限流Key表达式（SpEL）
-     * 支持从方法参数中提取用户ID、IP等维度
+     * 自定义Key构建器
+     * 实现KeyBuilder接口并标注为@Component
      *
-     * <p>表达式示例：</p>
-     * <ul>
-     *   <li>#user.id - 提取用户ID</li>
-     *   <li>#request.getRemoteAddr() - 提取IP地址</li>
-     *   <li>#request.getHeader('X-Token') - 提取Header</li>
-     *   <li>#user.id + ':' + #method - 组合Key</li>
-     * </ul>
-     *
-     * @return SpEL表达式
+     * @return Key构建器类型
      */
-    String keyExpression() default "";
+    Class<? extends KeyBuilder> keyBuilder() default SpelKeyBuilder.class;
 
     /**
-     * 降级方法名称
-     * 被限流时执行此方法，方法签名需与原方法一致
+     * 自定义降级处理器
+     * 实现FallbackHandler接口并标注为@Component
      *
-     * @return 降级方法名
+     * @return 降级处理器类型
      */
-    String fallbackMethod() default "";
+    Class<? extends FallbackHandler> fallbackHandler() default DefaultFallbackHandler.class;
 
     /**
      * 自定义限流异常类型

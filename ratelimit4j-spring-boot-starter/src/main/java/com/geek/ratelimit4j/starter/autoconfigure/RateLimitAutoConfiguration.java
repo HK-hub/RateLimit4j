@@ -6,6 +6,8 @@ import com.geek.ratelimit4j.local.algorithm.*;
 import com.geek.ratelimit4j.local.circuit.CircuitBreaker;
 import com.geek.ratelimit4j.redis.storage.RedisStorageProvider;
 import com.geek.ratelimit4j.starter.aspect.RateLimitAspect;
+import com.geek.ratelimit4j.starter.handler.DefaultFallbackHandler;
+import com.geek.ratelimit4j.starter.resolver.SpelKeyBuilder;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -13,21 +15,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
-import java.util.Objects;
-
 /**
  * RateLimit4j 自动配置类
- * 自动配置限流器相关Bean
- *
- * <p>配置示例：</p>
- * <pre>{@code
- * ratelimit4j:
- *   enabled: true
- *   default-mode: LOCAL
- * }</pre>
  *
  * @author RateLimit4j
  * @since 1.0.0
@@ -92,15 +85,26 @@ public class RateLimitAutoConfiguration {
     }
 
     @Bean
+    public SpelKeyBuilder spelKeyBuilder() {
+        return new SpelKeyBuilder();
+    }
+
+    @Bean
+    public DefaultFallbackHandler defaultFallbackHandler() {
+        return new DefaultFallbackHandler();
+    }
+
+    @Bean
     public RateLimitAspect rateLimitAspect(
             LocalTokenBucketAlgorithm tokenBucket,
             LocalLeakyBucketAlgorithm leakyBucket,
             LocalFixedWindowAlgorithm fixedWindow,
             LocalSlidingWindowLogAlgorithm slidingWindowLog,
             LocalSlidingWindowCounterAlgorithm slidingWindowCounter,
+            ApplicationContext applicationContext,
             @Autowired(required = false) RateLimitTelemetry telemetry) {
         return new RateLimitAspect(
                 tokenBucket, leakyBucket, fixedWindow,
-                slidingWindowLog, slidingWindowCounter, telemetry);
+                slidingWindowLog, slidingWindowCounter, applicationContext, telemetry);
     }
 }
