@@ -6,6 +6,7 @@ import com.geek.ratelimit4j.core.config.RateLimitContext;
 import com.geek.ratelimit4j.core.algorithm.RateLimitResult;
 import com.geek.ratelimit4j.core.config.ModeType;
 import com.geek.ratelimit4j.core.config.RateLimitConfig;
+import lombok.Getter;
 
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -33,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author RateLimit4j
  * @since 1.0.0
  */
+@Getter
 public class LocalSlidingWindowLogAlgorithm implements RateLimitAlgorithm {
 
     private final RateLimitConfig config;
@@ -65,7 +67,7 @@ public class LocalSlidingWindowLogAlgorithm implements RateLimitAlgorithm {
         long windowSizeMs = config.getPeriodMs();
 
         SlidingWindowLogState state = windows.computeIfAbsent(key, k ->
-                new SlidingWindowLogState());
+                new SlidingWindowLogState(config.getRate()));
 
         boolean acquired = state.tryAcquire(permits, windowSizeMs, config.getRate());
         long executionTimeMs = (System.nanoTime() - startTime) / 1_000_000;
@@ -104,25 +106,49 @@ public class LocalSlidingWindowLogAlgorithm implements RateLimitAlgorithm {
     }
 
     private static class SlidingWindowLogState {
+        // 最大时间戳容量（防止队列无限增长）
+        // 设置为限流上限的2倍，确保极端情况下也能正常工作
+        private static final int MAX_CAPACITY_MULTIPLIER = 2;
+        
         private final ConcurrentLinkedQueue<Long> timestamps;
         private final AtomicInteger count;
+        // 最大容量限制
+        private final int maxCapacity;
 
         SlidingWindowLogState() {
             this.timestamps = new ConcurrentLinkedQueue<>();
             this.count = new AtomicInteger(0);
+            // 默认最大容量为2000（假设限流上限1000的2倍）
+            this.maxCapacity = 2000;
+        }
+
+        /**
+         * 创建带容量限制的状态对象
+         *
+         * @param limit 限流上限
+         */
+        SlidingWindowLogState(int limit) {
+            this.timestamps = new ConcurrentLinkedQueue<>();
+            this.count = new AtomicInteger(0);
+            this.maxCapacity = limit * MAX_CAPACITY_MULTIPLIER;
         }
 
         boolean tryAcquire(int permits, long windowSizeMs, int limit) {
             long now = System.currentTimeMillis();
             long windowStart = now - windowSizeMs;
 
+            // 清理过期时间戳
             cleanupOldTimestamps(windowStart);
+
+            // 检查容量限制，防止队列无限增长
+            enforceCapacityLimit(limit);
 
             int currentCount = count.get();
             if (currentCount + permits > limit) {
                 return false;
             }
 
+            // 添加时间戳
             for (int i = 0; i < permits; i++) {
                 timestamps.offer(now);
             }
@@ -130,20 +156,49 @@ public class LocalSlidingWindowLogAlgorithm implements RateLimitAlgorithm {
             return true;
         }
 
+        /**
+         * 清理过期时间戳
+         *
+         * @param windowStart 窗口起始时间
+         */
         private void cleanupOldTimestamps(long windowStart) {
-            while (true) {
+            // 最多清理1000个过期时间戳（避免长时间阻塞）
+            int cleaned = 0;
+            while (cleaned < 1000) {
                 Long oldest = timestamps.peek();
+                // 队列为空或最老的时间戳在窗口内，停止清理
                 if (Objects.isNull(oldest) || oldest > windowStart) {
                     break;
                 }
+                // 移除过期时间戳
                 if (Objects.nonNull(timestamps.poll())) {
                     count.decrementAndGet();
+                    cleaned++;
+                }
+            }
+        }
+
+        /**
+         * 强制执行容量限制
+         * 当队列超过最大容量时，强制移除最老的时间戳
+         *
+         * @param limit 限流上限
+         */
+        private void enforceCapacityLimit(int limit) {
+            // 当队列大小超过最大容量时，强制清理
+            while (timestamps.size() > maxCapacity) {
+                Long removed = timestamps.poll();
+                if (Objects.nonNull(removed)) {
+                    count.decrementAndGet();
+                } else {
+                    break;
                 }
             }
         }
 
         int getCurrentCount() {
-            cleanupOldTimestamps(System.currentTimeMillis() - 1000);
+            // 清理过期时间戳（使用一个默认窗口大小）
+            cleanupOldTimestamps(System.currentTimeMillis() - 60000);
             return count.get();
         }
 

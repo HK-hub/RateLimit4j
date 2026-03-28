@@ -6,6 +6,7 @@ import com.geek.ratelimit4j.core.config.RateLimitContext;
 import com.geek.ratelimit4j.core.algorithm.RateLimitResult;
 import com.geek.ratelimit4j.core.config.ModeType;
 import com.geek.ratelimit4j.core.config.RateLimitConfig;
+import lombok.Getter;
 
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author RateLimit4j
  * @since 1.0.0
  */
+@Getter
 public class LocalFixedWindowAlgorithm implements RateLimitAlgorithm {
 
     private final RateLimitConfig config;
@@ -73,7 +75,8 @@ public class LocalFixedWindowAlgorithm implements RateLimitAlgorithm {
             return RateLimitResult.allowed(state.getRemaining(), key,
                     AlgorithmType.FIXED_WINDOW, ModeType.LOCAL, executionTimeMs);
         } else {
-            long waitTimeMs = state.getWaitTimeMs();
+            // 使用配置的windowSizeMs计算等待时间
+            long waitTimeMs = state.getWaitTimeMs(windowSizeMs);
             return RateLimitResult.rejected(waitTimeMs, key,
                     AlgorithmType.FIXED_WINDOW, ModeType.LOCAL, executionTimeMs);
         }
@@ -140,10 +143,16 @@ public class LocalFixedWindowAlgorithm implements RateLimitAlgorithm {
             return Math.max(0, count.get());
         }
 
-        long getWaitTimeMs() {
+        /**
+         * 获取需要等待的时间
+         *
+         * @param windowSizeMs 窗口大小（毫秒）
+         * @return 等待时间（毫秒）
+         */
+        long getWaitTimeMs(long windowSizeMs) {
             long windowStart = windowStartTimestamp.get();
             long elapsed = System.currentTimeMillis() - windowStart;
-            long windowSizeMs = 1000;
+            // 使用传入的窗口大小，而非硬编码的1000
             return Math.max(0, windowSizeMs - elapsed);
         }
     }

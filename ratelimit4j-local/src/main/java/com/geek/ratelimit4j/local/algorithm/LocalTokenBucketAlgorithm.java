@@ -6,6 +6,7 @@ import com.geek.ratelimit4j.core.config.RateLimitContext;
 import com.geek.ratelimit4j.core.algorithm.RateLimitResult;
 import com.geek.ratelimit4j.core.config.ModeType;
 import com.geek.ratelimit4j.core.config.RateLimitConfig;
+import lombok.Getter;
 
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +34,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author RateLimit4j
  * @since 1.0.0
  */
+@Getter
 public class LocalTokenBucketAlgorithm implements RateLimitAlgorithm {
 
     /**

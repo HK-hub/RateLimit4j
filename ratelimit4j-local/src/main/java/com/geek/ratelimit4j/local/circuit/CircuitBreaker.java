@@ -1,5 +1,7 @@
 package com.geek.ratelimit4j.local.circuit;
 
+import lombok.Getter;
+
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -27,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author RateLimit4j
  * @since 1.0.0
  */
+@Getter
 public class CircuitBreaker {
 
     /**
@@ -194,33 +197,6 @@ public class CircuitBreaker {
     private boolean shouldAttemptReset() {
         long lastFailure = lastFailureTime.get();
         return System.currentTimeMillis() - lastFailure >= recoveryTimeoutMs;
-    }
-
-    /**
-     * 获取当前状态
-     *
-     * @return 熔断器状态
-     */
-    public State getState() {
-        return state.get();
-    }
-
-    /**
-     * 获取当前失败次数
-     *
-     * @return 失败次数
-     */
-    public int getFailureCount() {
-        return failureCount.get();
-    }
-
-    /**
-     * 获取熔断器名称
-     *
-     * @return 名称
-     */
-    public String getName() {
-        return name;
     }
 
     /**

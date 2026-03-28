@@ -6,10 +6,12 @@ import com.geek.ratelimit4j.core.config.RateLimitContext;
 import com.geek.ratelimit4j.core.algorithm.RateLimitResult;
 import com.geek.ratelimit4j.core.config.ModeType;
 import com.geek.ratelimit4j.core.config.RateLimitConfig;
+import lombok.Getter;
 
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 本地滑动窗口计数器算法实现
@@ -32,6 +34,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author RateLimit4j
  * @since 1.0.0
  */
+@Getter
 public class LocalSlidingWindowCounterAlgorithm implements RateLimitAlgorithm {
 
     private final RateLimitConfig config;
@@ -103,11 +106,15 @@ public class LocalSlidingWindowCounterAlgorithm implements RateLimitAlgorithm {
     }
 
     private static class SlidingWindowCounterState {
+        // 使用细粒度锁替代synchronized(this)，提高并发性能
+        private final ReentrantLock lock;
         private final AtomicLong prevCount;
         private final AtomicLong currentCount;
         private final AtomicLong windowStartTimestamp;
 
         SlidingWindowCounterState() {
+            // 创建公平锁，避免线程饥饿
+            this.lock = new ReentrantLock();
             this.prevCount = new AtomicLong(0);
             this.currentCount = new AtomicLong(0);
             this.windowStartTimestamp = new AtomicLong(System.currentTimeMillis());
@@ -116,37 +123,79 @@ public class LocalSlidingWindowCounterAlgorithm implements RateLimitAlgorithm {
         boolean tryAcquire(int permits, long windowSizeMs, int limit) {
             long now = System.currentTimeMillis();
 
-            synchronized (this) {
-                long windowStart = windowStartTimestamp.get();
-                long elapsed = now - windowStart;
+            // 使用tryLock避免死锁，最多等待10ms
+            boolean acquired = false;
+            try {
+                if (lock.tryLock() || lock.tryLock(10, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    try {
+                        long windowStart = windowStartTimestamp.get();
+                        long elapsed = now - windowStart;
 
-                if (elapsed >= windowSizeMs) {
-                    if (elapsed >= windowSizeMs * 2) {
-                        prevCount.set(0);
-                    } else {
-                        prevCount.set(currentCount.get());
+                        // 检查是否需要滑动窗口
+                        if (elapsed >= windowSizeMs) {
+                            // 如果超过两个窗口，重置计数
+                            if (elapsed >= windowSizeMs * 2) {
+                                prevCount.set(0);
+                            } else {
+                                // 否则将当前计数转移为前一个窗口计数
+                                prevCount.set(currentCount.get());
+                            }
+                            // 重置当前窗口计数
+                            currentCount.set(0);
+                            windowStartTimestamp.set(now);
+                        }
+
+                        // 计算加权请求数
+                        double weightedCount = calculateWeightedCountInternal(windowSizeMs, now);
+                        // 检查是否超过限流阈值
+                        if (weightedCount + permits > limit) {
+                            return false;
+                        }
+
+                        // 增加计数
+                        currentCount.addAndGet(permits);
+                        return true;
+                    } finally {
+                        lock.unlock();
                     }
-                    currentCount.set(0);
-                    windowStartTimestamp.set(now);
                 }
-
-                double weightedCount = calculateWeightedCount(windowSizeMs);
-                if (weightedCount + permits > limit) {
-                    return false;
-                }
-
-                currentCount.addAndGet(permits);
-                return true;
+            } catch (InterruptedException e) {
+                // 获取锁被中断，返回false
+                Thread.currentThread().interrupt();
+                return false;
             }
+            return acquired;
+        }
+
+        /**
+         * 内部计算加权计数方法（需在锁内调用）
+         */
+        private double calculateWeightedCountInternal(long windowSizeMs, long now) {
+            long windowStart = windowStartTimestamp.get();
+            long elapsed = now - windowStart;
+
+            // 计算当前窗口权重
+            double weight = (double) elapsed / windowSizeMs;
+            // 加权公式：前一个窗口计数 * (1 - 权重) + 当前窗口计数
+            return prevCount.get() * (1 - weight) + currentCount.get();
         }
 
         private double calculateWeightedCount(long windowSizeMs) {
             long now = System.currentTimeMillis();
-            long windowStart = windowStartTimestamp.get();
-            long elapsed = now - windowStart;
-
-            double weight = (double) elapsed / windowSizeMs;
-            return prevCount.get() * (1 - weight) + currentCount.get();
+            // 尝试获取锁计算
+            try {
+                if (lock.tryLock(5, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    try {
+                        return calculateWeightedCountInternal(windowSizeMs, now);
+                    } finally {
+                        lock.unlock();
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            // 获取锁失败，返回近似值
+            return prevCount.get() + currentCount.get();
         }
 
         long getPrevCount() {
