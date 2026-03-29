@@ -1,12 +1,14 @@
 package com.geek.ratelimit4j.starter.annotation;
 
 import com.geek.ratelimit4j.core.algorithm.AlgorithmType;
-import com.geek.ratelimit4j.starter.handler.DefaultFallbackHandler;
+import com.geek.ratelimit4j.core.config.DimensionType;
+import com.geek.ratelimit4j.core.config.EngineType;
+import com.geek.ratelimit4j.core.exception.RateLimitException;
 import com.geek.ratelimit4j.starter.handler.FallbackHandler;
 import com.geek.ratelimit4j.starter.resolver.KeyBuilder;
-import com.geek.ratelimit4j.starter.resolver.SpelKeyBuilder;
 
 import java.lang.annotation.ElementType;
+import java.lang.annotation.Repeatable;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
@@ -15,31 +17,36 @@ import java.lang.annotation.Target;
  * 限流注解
  * 用于标注需要限流的方法或类，支持声明式限流配置
  *
+ * <p>Key提取优先级：</p>
+ * <ol>
+ *   <li>keys属性 - 使用SpEL表达式提取</li>
+ *   <li>keyBuilder - 使用自定义Key构建器</li>
+ *   <li>dimension - 使用预定义维度（IP、USER等）</li>
+ *   <li>默认 - 使用方法全限定名</li>
+ * </ol>
+ *
  * <p>使用示例：</p>
  * <pre>{@code
- * // 基础使用
+ * // 基于方法全限定名限流（默认）
  * @RateLimit(rate = 100, period = 1)
- * public String apiEndpoint() {
- *     return "Hello World";
- * }
+ * public String api() { ... }
  *
- * // 多Key维度限流（支持SpEL表达式）
- * @RateLimit(keys = {"#user.id", "#request.remoteAddr"}, rate = 50)
- * public String userApi(User user, HttpServletRequest request) {
- *     return "Success";
- * }
+ * // 自定义Key（SpEL表达式）- 最高优先级
+ * @RateLimit(keys = {"#user.id"}, rate = 50)
+ * public String api(User user) { ... }
  *
- * // 自定义Key构建器
+ * // 自定义Key构建器 - 第二优先级
  * @RateLimit(keyBuilder = UserKeyBuilder.class, rate = 100)
- * public String customKeyApi(User user) {
- *     return "Success";
- * }
+ * public String api(User user) { ... }
  *
- * // 自定义降级处理器
- * @RateLimit(rate = 10, fallbackHandler = CustomFallbackHandler.class)
- * public String apiWithFallback() {
- *     return "Success";
- * }
+ * // 基于IP维度 - 第三优先级
+ * @RateLimit(rate = 10, period = 1, dimension = DimensionType.IP)
+ * public String ipApi(HttpServletRequest request) { ... }
+ *
+ * // 多规则限流
+ * @RateLimit(rate = 1, period = 3, dimension = DimensionType.USER)
+ * @RateLimit(rate = 10, period = 60, dimension = DimensionType.USER)
+ * public String multiApi() { ... }
  * }</pre>
  *
  * @author RateLimit4j
@@ -47,7 +54,49 @@ import java.lang.annotation.Target;
  */
 @Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
+@Repeatable(RateLimits.class)
 public @interface RateLimit {
+
+    /**
+     * 限流Key数组（支持SpEL表达式）
+     * 最高优先级，指定后忽略keyBuilder和dimension属性
+     *
+     * <p>表达式示例：</p>
+     * <ul>
+     *   <li>#user.id - 提取用户ID</li>
+     *   <li>#request.remoteAddr - 提取IP地址</li>
+     *   <li>#p0, #a0 - 提取第一个参数</li>
+     * </ul>
+     *
+     * @return Key表达式数组，为空时使用keyBuilder属性
+     */
+    String[] keys() default {};
+
+    /**
+     * 自定义Key构建器
+     * 第二优先级，keys为空时生效
+     * 实现KeyBuilder接口并标注为@Component
+     *
+     * @return Key构建器类型，为空时使用dimension属性
+     */
+    Class<? extends KeyBuilder> keyBuilder() default KeyBuilder.class;
+
+    /**
+     * 限流维度
+     * 第三优先级，keys和keyBuilder都为空时生效
+     * 预定义的Key提取维度
+     *
+     * @return 维度类型，默认为METHOD（方法全限定名）
+     */
+    DimensionType dimension() default DimensionType.METHOD;
+
+    /**
+     * 限流Key前缀
+     * 用于区分不同业务场景的限流Key
+     *
+     * @return Key前缀，默认为空
+     */
+    String keyPrefix() default "";
 
     /**
      * 限流算法类型
@@ -55,6 +104,16 @@ public @interface RateLimit {
      * @return 算法类型，默认令牌桶
      */
     AlgorithmType algorithm() default AlgorithmType.TOKEN_BUCKET;
+
+    /**
+     * 限流引擎类型
+     * LOCAL：本地内存限流（单机）
+     * REDIS：分布式限流（基于Redis）
+     * AUTO：自动选择（优先使用配置的primary引擎）
+     *
+     * @return 引擎类型，默认AUTO
+     */
+    EngineType engine() default EngineType.AUTO;
 
     /**
      * 每周期允许的请求数
@@ -71,62 +130,32 @@ public @interface RateLimit {
     int period() default 1;
 
     /**
-     * 限流Key数组（支持SpEL表达式）
-     * 多个Key会被组合使用，支持从方法参数中提取用户ID、IP等维度
-     *
-     * <p>表达式示例：</p>
-     * <ul>
-     *   <li>#user.id - 提取用户ID</li>
-     *   <li>#request.remoteAddr - 提取IP地址</li>
-     *   <li>#request.getHeader('X-Token') - 提取Header</li>
-     * </ul>
-     *
-     * @return Key表达式数组
-     */
-    String[] keys() default {};
-
-    /**
-     * 限流Key前缀
-     *
-     * @return Key前缀
-     */
-    String keyPrefix() default "";
-
-    /**
-     * 自定义Key构建器
-     * 实现KeyBuilder接口并标注为@Component
-     *
-     * @return Key构建器类型
-     */
-    Class<? extends KeyBuilder> keyBuilder() default SpelKeyBuilder.class;
-
-    /**
      * 自定义降级处理器
      * 实现FallbackHandler接口并标注为@Component
+     * 为空时不执行降级处理，直接抛出异常
      *
-     * @return 降级处理器类型
+     * @return 降级处理器类型，默认为空
      */
-    Class<? extends FallbackHandler> fallbackHandler() default DefaultFallbackHandler.class;
+    Class<? extends FallbackHandler> fallbackHandler() default FallbackHandler.class;
 
     /**
      * 自定义限流异常类型
      *
      * @return 异常类型
      */
-    Class<? extends RuntimeException> exceptionClass() default 
-            com.geek.ratelimit4j.core.exception.RateLimitException.class;
+    Class<? extends RuntimeException> exceptionClass() default RateLimitException.class;
 
     /**
      * 最大突发容量（仅令牌桶算法）
      *
-     * @return 最大突发数
+     * @return 最大突发数，默认为0表示使用rate值
      */
     int maxBurst() default 0;
 
     /**
      * 是否启用限流
      *
-     * @return true表示启用
+     * @return true表示启用，默认启用
      */
     boolean enabled() default true;
 }

@@ -11,6 +11,7 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
+import lombok.Getter;
 
 import java.util.Objects;
 
@@ -30,6 +31,7 @@ import java.util.Objects;
  * @author RateLimit4j
  * @since 1.0.0
  */
+@Getter
 public class OpenTelemetryRateLimitTelemetry implements RateLimitTelemetry {
 
     private static final String METER_NAME = "ratelimit4j";
@@ -159,11 +161,6 @@ public class OpenTelemetryRateLimitTelemetry implements RateLimitTelemetry {
                         AttributeKey.stringKey("storage_type"), storageType,
                         AttributeKey.stringKey("error"), errorMessage
                 ));
-    }
-
-    @Override
-    public TelemetryConfig getConfig() {
-        return this.config;
     }
 
     @Override
