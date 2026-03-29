@@ -1,200 +1,456 @@
-# RateLimit4j Boot Starter
+<p align="center">
+  <img src="docs/images/logo.png" alt="RateLimit4j Logo" width="200">
+</p>
 
-一个开箱即用的Java限流工具框架，支持本地和分布式限流，提供完整的限流算法实现。
+<h1 align="center">RateLimit4j</h1>
 
-## 功能特性
+<p align="center">
+  <strong>🚀 A powerful, extensible rate limiting framework for Java applications</strong>
+</p>
 
-- **多种限流算法**：令牌桶、漏桶、固定窗口、滑动窗口日志、滑动窗口计数器
-- **双模式支持**：本地限流（基于内存）和分布式限流（基于Redis）
-- **注解驱动**：通过`@RateLimit`注解实现声明式限流
-- **SpEL表达式**：支持从方法参数中提取限流Key
-- **熔断保护**：内置熔断器，防止分布式存储故障影响业务
-- **OpenTelemetry集成**：完整的监控追踪支持
-- **高可配置**：灵活的YAML配置，支持多规则定义
-- **Spring Boot Starter**：自动配置，开箱即用
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#configuration">Configuration</a> •
+  <a href="#algorithms">Algorithms</a> •
+  <a href="README_CN.md">中文文档</a>
+</p>
 
-## 快速开始
+<p align="center">
+  <img src="https://img.shields.io/badge/Java-17+-green?logo=java" alt="Java 17+">
+  <img src="https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen?logo=spring" alt="Spring Boot 3.x">
+  <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="License">
+  <img src="https://img.shields.io/badge/Version-1.0.0-orange" alt="Version">
+</p>
 
-### Maven依赖
+---
+
+## ✨ Features
+
+### 🎯 Core Features
+
+- **5 Rate Limiting Algorithms** - Token Bucket, Leaky Bucket, Fixed Window, Sliding Window Log, Sliding Window Counter
+- **Dual Engine Support** - Local (JVM memory) and Redis (distributed) engines, **Redis is default**
+- **Spring Boot Integration** - Auto-configuration with `@RateLimit` annotation
+- **Multiple Dimensions** - Support IP, User, Tenant, Device, and custom dimensions
+- **Flexible Key Resolution** - SpEL expressions, custom KeyBuilder, predefined dimensions
+- **Fallback Handling** - Customizable fallback handlers for rejected requests
+- **OpenTelemetry Integration** - Built-in metrics and tracing support
+- **High Performance** - Optimized for high-concurrency scenarios
+
+### 🔧 Advanced Features
+
+| Feature | Description |
+|---------|-------------|
+| **Multi-rule Limiting** | Multiple `@RateLimit` annotations on a single method |
+| **Engine Selection** | Choose between LOCAL, REDIS, or AUTO per annotation |
+| **Primary Engine** | Configure default engine in `application.yml` (default: Redis) |
+| **Circuit Breaker** | Built-in circuit breaker for Redis failures |
+| **Custom Exceptions** | Define your own exception types |
+| **Key Prefix** | Namespace isolation with key prefixes |
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Java 17+
+- Spring Boot 3.x
+- Maven 3.6+ or Gradle 7+
+
+### Installation
+
+Add dependency to your `pom.xml`:
 
 ```xml
 <dependency>
-    <groupId>com.geek.ratelimit</groupId>
+    <groupId>com.geek.ratelimit4j</groupId>
     <artifactId>ratelimit4j-spring-boot-starter</artifactId>
     <version>1.0.0</version>
 </dependency>
 ```
 
-### 基础配置
+Or `build.gradle`:
 
-```yaml
-ratelimit4j:
-  enabled: true
-  default-mode: LOCAL
-  default-rule:
-    algorithm: token_bucket
-    rate: 100
-    period: 1
+```groovy
+implementation 'com.geek.ratelimit4j:ratelimit4j-spring-boot-starter:1.0.0'
 ```
 
-### 注解式使用
+## 📝 Usage Examples
+
+### 1. Basic Usage
 
 ```java
 @RestController
 public class ApiController {
 
-    @RateLimit(rate = 100, period = 1, algorithm = AlgorithmType.TOKEN_BUCKET)
-    public String index() {
+    // Simple rate limit: 100 requests per second (using Redis by default)
+    @RateLimit(rate = 100)
+    public String basicApi() {
         return "Hello World";
-    }
-
-    @RateLimit(keyExpression = "#user.id", rate = 50, period = 60,
-                algorithm = AlgorithmType.SLIDING_WINDOW_COUNTER)
-    public String userApi(User user) {
-        return "User API";
-    }
-
-    @RateLimit(rate = 10, fallbackMethod = "fallback")
-    public String apiWithFallback() {
-        return "Success";
-    }
-
-    public String fallback() {
-        return "Rate limited, please try again later";
     }
 }
 ```
 
-## 限流算法
+### 2. Multi-rule Limiting
 
-| 算法 | 特点 | 适用场景 |
-|------|------|----------|
-| 令牌桶 (TOKEN_BUCKET) | 允许突发流量，恒定补充令牌 | API接口、间歇性流量 |
-| 漏桶 (LEAKY_BUCKET) | 恒定流出速率，平滑流量 | 需要稳定流速的场景 |
-| 固定窗口 (FIXED_WINDOW) | 简单高效，有临界问题 | 简单限流、对精度要求不高 |
-| 滑动窗口日志 (SLIDING_WINDOW_LOG) | 精确控制，内存开销大 | 需要精确限流的场景 |
-| 滑动窗口计数器 (SLIDING_WINDOW_COUNTER) | 平衡精度与性能 | 一般限流场景 |
+```java
+// Multiple rules: 3 seconds 1 time + 1 minute 10 times
+@RateLimit(rate = 1, period = 3)
+@RateLimit(rate = 10, period = 60)
+public String multiRuleApi() {
+    return "Multi-rule limited";
+}
+```
 
-## 配置说明
+### 3. Dimension-based Limiting
 
-### 完整配置示例
+```java
+// IP-based limiting
+@IpRateLimit(rate = 10, period = 1)
+public String ipApi(HttpServletRequest request) {
+    return "IP limited";
+}
+
+// User-based limiting
+@UserRateLimit(rate = 100, period = 60)
+public String userApi(@CurrentUser User user) {
+    return "User limited";
+}
+
+// Tenant-based limiting (multi-tenant scenarios)
+@TenantRateLimit(rate = 1000, period = 1)
+public String tenantApi() {
+    return "Tenant limited";
+}
+
+// Device-based limiting (mobile/IoT scenarios)
+@DeviceRateLimit(rate = 10, period = 1)
+public String deviceApi() {
+    return "Device limited";
+}
+```
+
+### 4. Custom Key with SpEL
+
+```java
+// Extract keys from method parameters using SpEL
+@RateLimit(keys = {"#user.id", "#request.remoteAddr"}, rate = 50)
+public String customKeyApi(User user, HttpServletRequest request) {
+    return "Custom key limited";
+}
+```
+
+### 5. Custom KeyBuilder
+
+```java
+@Component
+public class UserIdKeyBuilder implements KeyBuilder {
+    @Override
+    public String build(ProceedingJoinPoint joinPoint) {
+        Object[] args = joinPoint.getArgs();
+        // Custom logic to extract user ID
+        return "user:" + extractUserId(args);
+    }
+}
+
+// Use custom KeyBuilder
+@RateLimit(keyBuilder = UserIdKeyBuilder.class, rate = 100)
+public String customBuilderApi(User user) {
+    return "Custom builder limited";
+}
+```
+
+### 6. Local Engine (Single Instance)
+
+```java
+// Use local engine for single-instance scenarios
+@RateLimit(rate = 100, engine = EngineType.LOCAL)
+public String localApi() {
+    return "Local limited";
+}
+```
+
+### 7. Fallback Handler
+
+```java
+@Component
+public class CustomFallbackHandler implements FallbackHandler {
+    @Override
+    public Object handle(ProceedingJoinPoint joinPoint, RateLimitException e) {
+        // Custom fallback logic
+        return ResponseEntity
+            .status(429)
+            .body("Too many requests, please try again later");
+    }
+}
+
+// Use custom fallback handler
+@RateLimit(rate = 10, fallbackHandler = CustomFallbackHandler.class)
+public String fallbackApi() {
+    return "With fallback";
+}
+```
+
+## ⚙️ Configuration
+
+### application.yml
 
 ```yaml
 ratelimit4j:
+  # Enable rate limiting (default: true)
   enabled: true
-  default-mode: LOCAL
-
+  
+  # Primary engine: redis or local (default: redis)
+  primary-engine: redis
+  
+  # Default rate limiting rule
   default-rule:
     algorithm: token_bucket
     rate: 100
     period: 1
     key-prefix: ""
     max-burst: 100
-
-  rules:
-    api-user:
-      algorithm: sliding_window_counter
-      rate: 50
-      period: 60
-      key-prefix: "user:api"
-    api-ip:
-      algorithm: fixed_window
-      rate: 200
-      period: 1
-      key-prefix: "ip:api"
-
+  
+  # Redis configuration
   redis:
+    enabled: true
     host: localhost
     port: 6379
     password: ""
     database: 0
     timeout: 2000
-
+  
+  # Fallback configuration
   fallback:
     enabled: true
     degrade-to-local: true
     failure-threshold: 5
     recovery-timeout: 30000
-
+  
+  # OpenTelemetry configuration
   telemetry:
     enabled: true
-    service-name: "RateLimit4j"
-    endpoint: "http://localhost:4317"
+    service-name: RateLimit4j
+    endpoint: http://localhost:4317
 ```
 
-### 配置项说明
+## 📊 Algorithms
 
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| `enabled` | 是否启用限流 | true |
-| `default-mode` | 默认限流模式 (LOCAL/DISTRIBUTED) | LOCAL |
-| `default-rule.algorithm` | 默认算法 | token_bucket |
-| `default-rule.rate` | 每周期请求数 | 100 |
-| `default-rule.period` | 周期（秒） | 1 |
-| `default-rule.max-burst` | 最大突发容量 | 100 |
-| `fallback.degrade-to-local` | Redis故障时降级到本地限流 | true |
-| `fallback.failure-threshold` | 熔断失败次数阈值 | 5 |
-| `fallback.recovery-timeout` | 熔断恢复时间（毫秒） | 30000 |
+### Algorithm Comparison
 
-## @RateLimit注解参数
+| Algorithm | Precision | Memory | Boundary Issue | Use Case |
+|-----------|-----------|--------|----------------|----------|
+| **Token Bucket** | High | Low | No | Burst traffic handling |
+| **Leaky Bucket** | High | Low | No | Smooth traffic output |
+| **Fixed Window** | Low | Lowest | Yes | Simple scenarios |
+| **Sliding Window Log** | Highest | High | No | Precise limiting |
+| **Sliding Window Counter** | Medium | Low | Minimal | Balanced solution |
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `algorithm` | 限流算法 | TOKEN_BUCKET |
-| `rate` | 每周期请求数 | 100 |
-| `period` | 周期（秒） | 1 |
-| `keyPrefix` | Key前缀 | "" |
-| `keyExpression` | SpEL表达式 | "" |
-| `fallbackMethod` | 降级方法名 | "" |
-| `exceptionClass` | 异常类型 | RateLimitException |
-| `maxBurst` | 最大突发容量 | 0(使用rate) |
-| `enabled` | 是否启用 | true |
+### Algorithm Details
 
-### SpEL表达式示例
+#### 1. Token Bucket
 
-```java
-// 用户ID维度
-@RateLimit(keyExpression = "#user.id", rate = 50)
-
-// IP地址维度
-@RateLimit(keyExpression = "#request.remoteAddr", rate = 100)
-
-// Header维度
-@RateLimit(keyExpression = "#request.getHeader('X-Token')", rate = 200)
-
-// 组合Key
-@RateLimit(keyExpression = "#user.id + ':' + #request.requestURI", rate = 30)
+```
+┌─────────────────────────────────────────┐
+│              Token Bucket               │
+│  ┌───────────────────────────────────┐  │
+│  │  Tokens: [●][●][●][●][●]         │  │
+│  │  Rate: 100 tokens/period         │  │
+│  │  Max Burst: 100                  │  │
+│  └───────────────────────────────────┘  │
+│                                         │
+│  Request → Consume Token → Allowed      │
+│  Request → No Token → Rejected          │
+└─────────────────────────────────────────┘
 ```
 
-## 监控指标
+- Tokens are added at a fixed rate
+- Requests consume tokens
+- Allows burst traffic within bucket capacity
+- Best for: API rate limiting with burst handling
 
-OpenTelemetry集成后暴露以下指标：
+#### 2. Leaky Bucket
 
-| 指标名称 | 类型 | 说明 |
-|----------|------|------|
-| `ratelimit.requests.total` | Counter | 总请求计数 |
-| `ratelimit.requests.allowed` | Counter | 允许通过数 |
-| `ratelimit.requests.rejected` | Counter | 被限流数 |
-| `ratelimit.algorithm.latency` | Histogram | 算法执行延迟 |
+```
+┌─────────────────────────────────────────┐
+│              Leaky Bucket               │
+│  ┌───────────────────────────────────┐  │
+│  │         │  Water Level            │  │
+│  │    ▓▓▓▓▓│  [●][●][●]             │  │
+│  │    ▓▓▓▓▓│                         │  │
+│  │    ▓▓▓▓▓│  Leak Rate: 100/s       │  │
+│  └───────────────────────────────────┘  │
+│                                         │
+│  Requests → Fill Bucket → Leak at rate  │
+│  Bucket Full → Rejected                 │
+└─────────────────────────────────────────┘
+```
 
-## 模块结构
+- Requests flow out at a constant rate
+- Smooth traffic output
+- No burst handling
+- Best for: Traffic smoothing, API gateway
+
+#### 3. Fixed Window
+
+```
+┌─────────────────────────────────────────┐
+│            Fixed Window                 │
+│                                         │
+│  Window 1 (0-1s)    Window 2 (1-2s)    │
+│  ┌────────────┐     ┌────────────┐     │
+│  │ Count: 95  │     │ Count: 30  │     │
+│  │ Limit: 100 │     │ Limit: 100 │     │
+│  └────────────┘     └────────────┘     │
+│                                         │
+│  ⚠️ Boundary Issue: 200 requests at     │
+│     window boundary (0.9s-1.1s)         │
+└─────────────────────────────────────────┘
+```
+
+- Simple time window division
+- Counter resets at window boundaries
+- Boundary issue: possible 2x traffic at boundary
+- Best for: Simple rate limiting scenarios
+
+#### 4. Sliding Window Log
+
+```
+┌─────────────────────────────────────────┐
+│         Sliding Window Log              │
+│                                         │
+│  Current Time: 1000ms                   │
+│  Window: 1000ms                         │
+│                                         │
+│  Log: [100][200][300]...[900][1000]    │
+│        ↑                            ↑   │
+│        Expired                    Valid │
+│                                         │
+│  Count valid logs → Compare with limit  │
+│  ✓ No boundary issue                    │
+│  ✗ High memory usage                    │
+└─────────────────────────────────────────┘
+```
+
+- Records each request timestamp
+- Precise counting within time window
+- No boundary issues
+- Higher memory consumption
+- Best for: Precise rate limiting
+
+#### 5. Sliding Window Counter
+
+```
+┌─────────────────────────────────────────┐
+│      Sliding Window Counter             │
+│                                         │
+│  Previous Window │ Current Window       │
+│  ┌──────────────┐│┌──────────────┐     │
+│  │ Count: 50    │││ Count: 30    │     │
+│  │ Weight: 0.3  │││ Weight: 0.7  │     │
+│  └──────────────┘│└──────────────┘     │
+│                                         │
+│  Weighted = 50 × 0.3 + 30 = 45         │
+│  ✓ Low memory                           │
+│  ✓ Minimal boundary issue               │
+└─────────────────────────────────────────┘
+```
+
+- Combines previous and current window counts
+- Weighted calculation based on time position
+- Lower memory than log-based
+- Minimal boundary issues
+- Best for: Balanced solution
+
+## 🏗️ Architecture
+
+### Module Structure
 
 ```
 RateLimit4j/
-├── ratelimit4j-core           // 核心接口和抽象类
-├── ratelimit4j-local          // 本地限流实现
-├── ratelimit4j-redis          // Redis分布式限流实现
-├── ratelimit4j-spring-boot-starter  // Spring Boot自动配置
+├── ratelimit4j-core/                    # Core module
+│   ├── algorithm/                        # Algorithm interfaces
+│   ├── config/                           # Configuration
+│   ├── exception/                        # Exceptions
+│   ├── storage/                          # Storage interfaces
+│   └── telemetry/                        # Telemetry interfaces
+│
+├── ratelimit4j-local/                   # Local engine
+│   ├── algorithm/                        # Local algorithms
+│   └── circuit/                          # Circuit breaker
+│
+├── ratelimit4j-redis/                   # Redis engine (default)
+│   ├── algorithm/                        # Redis algorithms
+│   └── storage/                          # Redis storage
+│
+└── ratelimit4j-spring-boot-starter/     # Spring Boot starter
+    ├── annotation/                       # Annotations
+    ├── aspect/                           # AOP aspect
+    ├── handler/                          # Fallback handlers
+    ├── resolver/                         # Key resolvers
+    └── autoconfigure/                    # Auto-configuration
 ```
 
-## 技术栈
+### Key Resolution Priority
 
-- Java 17+
-- Spring Boot 3.x
-- Redisson 3.45.x
-- Apache Commons Lang3
-- OpenTelemetry SDK
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Key Resolution Flow                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. keys (SpEL) - Highest Priority                         │
+│     ├── keys = {"#user.id"}                                │
+│     └── Extract from method parameters                       │
+│                                                             │
+│  2. keyBuilder (Custom)                                     │
+│     ├── keyBuilder = UserIdKeyBuilder.class                 │
+│     └── Custom key building logic                           │
+│                                                             │
+│  3. dimension (Predefined)                                  │
+│     ├── IP      → Extract from HttpServletRequest           │
+│     ├── USER    → Extract from SecurityContext              │
+│     ├── TENANT  → Extract from Header/Parameter             │
+│     └── DEVICE  → Extract from Header/User-Agent            │
+│                                                             │
+│  4. Default (Method FQN) - Lowest Priority                  │
+│     └── com.example.ApiController#methodName                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## 许可证
+## 🤝 Contributing
 
-Apache License 2.0
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Development Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/RateLimit4j.git
+
+# Navigate to project directory
+cd RateLimit4j
+
+# Build with Maven
+mvn clean install
+
+# Run tests
+mvn test
+```
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/yourusername">RateLimit4j Team</a>
+</p>
