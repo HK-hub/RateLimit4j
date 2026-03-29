@@ -19,7 +19,7 @@ import java.util.Objects;
  * <pre>
  * ratelimit4j:
  *   enabled: true
- *   primary-engine: local  # 主引擎: local/redis
+ *   primary-engine: redis  # 主引擎: redis/local（默认redis）
  *   default-rule:
  *     algorithm: token_bucket
  *     rate: 100
@@ -50,9 +50,9 @@ public class RateLimitProperties {
     /**
      * 主引擎类型
      * 当注解指定engine=AUTO时使用此引擎
-     * 可选值: local, redis
+     * 可选值: redis（默认）, local
      */
-    private EngineType primaryEngine = EngineType.LOCAL;
+    private EngineType primaryEngine = EngineType.REDIS;
 
     /**
      * 默认限流规则

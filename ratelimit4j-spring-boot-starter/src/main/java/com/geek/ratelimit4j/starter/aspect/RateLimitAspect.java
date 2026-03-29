@@ -8,8 +8,10 @@ import com.geek.ratelimit4j.core.config.EngineType;
 import com.geek.ratelimit4j.core.config.ModeType;
 import com.geek.ratelimit4j.core.config.RateLimitConfig;
 import com.geek.ratelimit4j.core.config.RateLimitContext;
+import com.geek.ratelimit4j.core.exception.NoSuchRateLimitEngineException;
 import com.geek.ratelimit4j.core.exception.RateLimitException;
 import com.geek.ratelimit4j.core.telemetry.RateLimitTelemetry;
+import com.geek.ratelimit4j.core.engine.RateLimitEngineProvider;
 import com.geek.ratelimit4j.local.algorithm.*;
 import com.geek.ratelimit4j.starter.annotation.DeviceRateLimit;
 import com.geek.ratelimit4j.starter.annotation.IpRateLimit;
@@ -28,6 +30,7 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.context.ApplicationContext;
 import org.springframework.expression.EvaluationContext;
 import org.springframework.expression.Expression;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
@@ -36,6 +39,7 @@ import org.springframework.expression.spel.support.StandardEvaluationContext;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -86,7 +90,7 @@ public class RateLimitAspect {
      * Spring应用上下文
      * 用于获取FallbackHandler等Bean
      */
-    private final org.springframework.context.ApplicationContext applicationContext;
+    private final ApplicationContext applicationContext;
 
     /**
      * 监控组件
@@ -97,8 +101,9 @@ public class RateLimitAspect {
     /**
      * 主引擎类型
      * 当注解指定AUTO时使用此引擎
+     * 如果为null，则从容器中按Order排序选择第一个可用引擎
      */
-    private final EngineType primaryEngine;
+    private EngineType primaryEngine;
 
     /**
      * 维度Key解析器
@@ -131,8 +136,8 @@ public class RateLimitAspect {
         this.applicationContext = applicationContext;
         // 初始化监控组件
         this.telemetry = telemetry;
-        // 默认使用本地引擎
-        this.primaryEngine = EngineType.LOCAL;
+        // primaryEngine初始化为null，由配置类设置或从容器中查找
+        this.primaryEngine = null;
         // 初始化维度Key解析器
         this.dimensionKeyResolver = new DimensionKeyResolver();
 
@@ -218,16 +223,7 @@ public class RateLimitAspect {
             String key = resolveKey(joinPoint, rateLimit);
             // 选择限流引擎
             EngineType engine = resolveEngine(rateLimit.engine());
-            // 获取限流算法
             RateLimitAlgorithm algorithm = getAlgorithm(rateLimit.algorithm(), engine);
-
-            // 检查算法是否存在
-            if (Objects.isNull(algorithm)) {
-                log.warn("[RateLimit] No algorithm found for type: {}, engine: {}", 
-                         rateLimit.algorithm(), engine);
-                // 算法不存在，跳过限流，直接执行方法
-                continue;
-            }
 
             // 构建限流配置
             RateLimitConfig config = buildConfig(rateLimit);
@@ -495,13 +491,36 @@ public class RateLimitAspect {
      * @return 实际使用的引擎类型
      */
     private EngineType resolveEngine(EngineType engine) {
-        // 检查是否为AUTO
         if (engine == EngineType.AUTO) {
-            // 使用配置的主引擎
-            return this.primaryEngine;
+            if (this.primaryEngine != null && isEngineAvailable(this.primaryEngine)) {
+                return this.primaryEngine;
+            }
+            return resolveEngineFromProviders();
         }
-        // 返回指定的引擎
+        if (!isEngineAvailable(engine)) {
+            throw new NoSuchRateLimitEngineException(engine);
+        }
         return engine;
+    }
+
+    private boolean isEngineAvailable(EngineType engine) {
+        if (engine == EngineType.REDIS) {
+            return !redisAlgorithmCache.isEmpty();
+        }
+        if (engine == EngineType.LOCAL) {
+            return !localAlgorithmCache.isEmpty();
+        }
+        return false;
+    }
+
+    private EngineType resolveEngineFromProviders() {
+        Map<String, RateLimitEngineProvider> providers = 
+            applicationContext.getBeansOfType(RateLimitEngineProvider.class);
+        return providers.values().stream()
+            .sorted(Comparator.comparingInt(RateLimitEngineProvider::getOrder))
+            .findFirst()
+            .map(RateLimitEngineProvider::getEngineType)
+            .orElseThrow(() -> new NoSuchRateLimitEngineException(null));
     }
 
     /**

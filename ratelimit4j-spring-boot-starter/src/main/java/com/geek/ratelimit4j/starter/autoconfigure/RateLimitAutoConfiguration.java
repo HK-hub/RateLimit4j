@@ -3,15 +3,18 @@ package com.geek.ratelimit4j.starter.autoconfigure;
 import com.geek.ratelimit4j.core.algorithm.AlgorithmType;
 import com.geek.ratelimit4j.core.config.EngineType;
 import com.geek.ratelimit4j.core.config.RateLimitConfig;
+import com.geek.ratelimit4j.core.engine.RateLimitEngineProvider;
 import com.geek.ratelimit4j.core.storage.StorageProvider;
 import com.geek.ratelimit4j.core.telemetry.RateLimitTelemetry;
 import com.geek.ratelimit4j.local.algorithm.*;
 import com.geek.ratelimit4j.local.circuit.CircuitBreaker;
+import com.geek.ratelimit4j.local.engine.LocalEngineProvider;
 import com.geek.ratelimit4j.redis.algorithm.RedisFixedWindowAlgorithm;
 import com.geek.ratelimit4j.redis.algorithm.RedisLeakyBucketAlgorithm;
 import com.geek.ratelimit4j.redis.algorithm.RedisSlidingWindowCounterAlgorithm;
 import com.geek.ratelimit4j.redis.algorithm.RedisSlidingWindowLogAlgorithm;
 import com.geek.ratelimit4j.redis.algorithm.RedisTokenBucketAlgorithm;
+import com.geek.ratelimit4j.redis.engine.RedisEngineProvider;
 import com.geek.ratelimit4j.redis.storage.RedisStorageProvider;
 import com.geek.ratelimit4j.starter.aspect.RateLimitAspect;
 import lombok.Getter;
@@ -239,6 +242,37 @@ public class RateLimitAutoConfiguration {
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("local-sliding-window-counter");
         // 创建本地滑动窗口计数器算法
         return new LocalSlidingWindowCounterAlgorithm(config);
+    }
+
+    // ==================== 引擎提供者 ====================
+
+    /**
+     * 配置本地引擎提供者
+     * Order为200，优先级低于Redis引擎
+     *
+     * @return 本地引擎提供者
+     */
+    @Bean
+    public LocalEngineProvider localEngineProvider() {
+        log.info("[RateLimit4j] Initializing local engine provider");
+        // 创建本地引擎提供者
+        return new LocalEngineProvider();
+    }
+
+    /**
+     * 配置Redis引擎提供者
+     * Order为100，优先级高于本地引擎
+     *
+     * @param redissonClient Redisson客户端（可选）
+     * @return Redis引擎提供者
+     */
+    @Bean
+    @ConditionalOnBean(RedissonClient.class)
+    @ConditionalOnProperty(prefix = "ratelimit4j.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public RedisEngineProvider redisEngineProvider(RedissonClient redissonClient) {
+        log.info("[RateLimit4j] Initializing Redis engine provider");
+        // 创建Redis引擎提供者
+        return new RedisEngineProvider(redissonClient);
     }
 
     // ==================== 熔断器 ====================
