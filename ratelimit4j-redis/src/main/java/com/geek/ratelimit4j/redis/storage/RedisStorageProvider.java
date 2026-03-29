@@ -2,6 +2,7 @@ package com.geek.ratelimit4j.redis.storage;
 
 import com.geek.ratelimit4j.core.storage.StorageProvider;
 import com.geek.ratelimit4j.core.storage.StorageType;
+import lombok.Getter;
 import org.redisson.api.RBucket;
 import org.redisson.api.RKeys;
 import org.redisson.api.RScript;
@@ -26,6 +27,7 @@ import java.util.concurrent.TimeUnit;
  * @author RateLimit4j
  * @since 1.0.0
  */
+@Getter
 public class RedisStorageProvider implements StorageProvider {
 
     /**
