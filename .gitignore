@@ -17,6 +17,8 @@ target/
 .settings
 .springBeans
 .sts4-cache
+.settings/
+.flattened-pom.xml
 
 ### NetBeans ###
 /nbproject/private/

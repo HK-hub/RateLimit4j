@@ -3,7 +3,6 @@ package com.geek.ratelimit4j.starter.resolver;
 import org.apache.commons.lang3.StringUtils;
 
 import java.lang.reflect.Method;
-import java.util.Objects;
 
 /**
  * 默认Key解析器
@@ -12,7 +11,7 @@ import java.util.Objects;
  * @author RateLimit4j
  * @since 1.0.0
  */
-public class DefaultKeyResolver implements KeyResolver {
+public class DefaultKeyResolver implements com.geek.ratelimit4j.core.resolver.KeyResolver {
 
     @Override
     public String resolve(Method method, Object[] args, String keyExpression, String keyPrefix) {

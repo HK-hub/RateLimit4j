@@ -1,4 +1,4 @@
-package com.geek.ratelimit4j.starter.resolver;
+package com.geek.ratelimit4j.core.resolver;
 
 import org.aspectj.lang.ProceedingJoinPoint;
 

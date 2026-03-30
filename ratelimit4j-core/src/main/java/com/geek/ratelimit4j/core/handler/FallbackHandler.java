@@ -1,4 +1,4 @@
-package com.geek.ratelimit4j.starter.handler;
+package com.geek.ratelimit4j.core.handler;
 
 import com.geek.ratelimit4j.core.exception.RateLimitException;
 import org.aspectj.lang.ProceedingJoinPoint;

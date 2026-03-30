@@ -1,11 +1,11 @@
-package com.geek.ratelimit4j.starter.annotation;
+package com.geek.ratelimit4j.core.annotation;
 
 import com.geek.ratelimit4j.core.algorithm.AlgorithmType;
 import com.geek.ratelimit4j.core.config.DimensionType;
 import com.geek.ratelimit4j.core.config.EngineType;
 import com.geek.ratelimit4j.core.exception.RateLimitException;
-import com.geek.ratelimit4j.starter.handler.FallbackHandler;
-import com.geek.ratelimit4j.starter.resolver.KeyBuilder;
+import com.geek.ratelimit4j.core.handler.FallbackHandler;
+import com.geek.ratelimit4j.core.resolver.KeyBuilder;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -13,18 +13,18 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 用户维度限流注解
- * 基于用户ID进行限流
+ * 租户维度限流注解
+ * 基于租户ID进行限流，适用于多租户场景
  *
  * <p>使用示例：</p>
  * <pre>{@code
- * // 每秒最多5次请求（按用户限制）
- * @UserRateLimit(rate = 5, period = 1)
- * public String api(@CurrentUser User user) { ... }
+ * // 每个租户每秒最多100次请求
+ * @TenantRateLimit(rate = 100, period = 1)
+ * public String api(@TenantId String tenantId) { ... }
  *
- * // 每分钟最多100次请求
- * @UserRateLimit(rate = 100, period = 60)
- * public String api(@CurrentUser User user) { ... }
+ * // 使用Redis分布式限流
+ * @TenantRateLimit(rate = 1000, period = 1, engine = EngineType.REDIS)
+ * public String distributedApi(@TenantId String tenantId) { ... }
  * }</pre>
  *
  * @author RateLimit4j
@@ -32,8 +32,8 @@ import java.lang.annotation.Target;
  */
 @Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
-@RateLimit(dimension = DimensionType.USER)
-public @interface UserRateLimit {
+@RateLimit(dimension = DimensionType.TENANT)
+public @interface TenantRateLimit {
 
     /**
      * 每周期允许的请求数

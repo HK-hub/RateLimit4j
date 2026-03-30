@@ -1,11 +1,11 @@
-package com.geek.ratelimit4j.starter.annotation;
+package com.geek.ratelimit4j.core.annotation;
 
 import com.geek.ratelimit4j.core.algorithm.AlgorithmType;
 import com.geek.ratelimit4j.core.config.DimensionType;
 import com.geek.ratelimit4j.core.config.EngineType;
 import com.geek.ratelimit4j.core.exception.RateLimitException;
-import com.geek.ratelimit4j.starter.handler.FallbackHandler;
-import com.geek.ratelimit4j.starter.resolver.KeyBuilder;
+import com.geek.ratelimit4j.core.handler.FallbackHandler;
+import com.geek.ratelimit4j.core.resolver.KeyBuilder;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Repeatable;

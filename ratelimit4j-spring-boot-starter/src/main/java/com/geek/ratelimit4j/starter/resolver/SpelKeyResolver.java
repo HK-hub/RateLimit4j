@@ -25,7 +25,7 @@ import java.util.Objects;
  * @author RateLimit4j
  * @since 1.0.0
  */
-public class SpelKeyResolver implements KeyResolver {
+public class SpelKeyResolver implements com.geek.ratelimit4j.core.resolver.KeyResolver {
 
     /**
      * SpEL表达式解析器
@@ -35,7 +35,7 @@ public class SpelKeyResolver implements KeyResolver {
     /**
      * 默认Key解析器（表达式为空时使用）
      */
-    private final KeyResolver defaultResolver = new DefaultKeyResolver();
+    private final com.geek.ratelimit4j.core.resolver.KeyResolver defaultResolver = new DefaultKeyResolver();
 
     @Override
     public String resolve(Method method, Object[] args, String keyExpression, String keyPrefix) {

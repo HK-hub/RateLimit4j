@@ -1,4 +1,4 @@
-package com.geek.ratelimit4j.starter.annotation;
+package com.geek.ratelimit4j.core.annotation;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

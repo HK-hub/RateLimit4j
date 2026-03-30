@@ -1,6 +1,11 @@
 package com.geek.ratelimit4j.starter.autoconfigure;
 
 import com.geek.ratelimit4j.core.config.RateLimitConfig;
+import com.geek.ratelimit4j.core.engine.DefaultEngineProviderRegistry;
+import com.geek.ratelimit4j.core.engine.EngineProviderRegistry;
+import com.geek.ratelimit4j.core.engine.RateLimitEngineProvider;
+import com.geek.ratelimit4j.core.resolver.DimensionResolver;
+import com.geek.ratelimit4j.core.resolver.DimensionResolverRegistry;
 import com.geek.ratelimit4j.core.storage.StorageProvider;
 import com.geek.ratelimit4j.core.telemetry.RateLimitTelemetry;
 import com.geek.ratelimit4j.local.algorithm.*;
@@ -13,9 +18,10 @@ import com.geek.ratelimit4j.redis.algorithm.RedisSlidingWindowLogAlgorithm;
 import com.geek.ratelimit4j.redis.algorithm.RedisTokenBucketAlgorithm;
 import com.geek.ratelimit4j.redis.engine.RedisEngineProvider;
 import com.geek.ratelimit4j.redis.storage.RedisStorageProvider;
-import com.geek.ratelimit4j.starter.aspect.RateLimitAspect;
 import com.geek.ratelimit4j.core.registry.AlgorithmRegistry;
+import com.geek.ratelimit4j.starter.aspect.DefaultRateLimitAspect;
 import com.geek.ratelimit4j.starter.registry.DefaultAlgorithmRegistry;
+import com.geek.ratelimit4j.starter.resolver.*;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
@@ -30,6 +36,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+
+import java.util.List;
 
 /**
  * RateLimit4j 自动配置类
@@ -320,12 +328,11 @@ public class RateLimitAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public com.geek.ratelimit4j.core.resolver.DimensionResolverRegistry dimensionResolverRegistry(
-            java.util.List<com.geek.ratelimit4j.core.resolver.DimensionResolver> resolvers) {
+    public DimensionResolverRegistry dimensionResolverRegistry(List<DimensionResolver> resolvers) {
         log.info("[RateLimit4j] Initializing DimensionResolverRegistry with {} resolvers", resolvers.size());
-        com.geek.ratelimit4j.core.resolver.DimensionResolverRegistry registry =
-                new com.geek.ratelimit4j.core.resolver.DimensionResolverRegistry();
-        for (com.geek.ratelimit4j.core.resolver.DimensionResolver resolver : resolvers) {
+        DimensionResolverRegistry registry =
+                new DimensionResolverRegistry();
+        for (DimensionResolver resolver : resolvers) {
             registry.register(resolver);
         }
         return registry;
@@ -336,9 +343,9 @@ public class RateLimitAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public com.geek.ratelimit4j.core.resolver.DimensionResolver ipDimensionResolver() {
+    public DimensionResolver ipDimensionResolver() {
         log.info("[RateLimit4j] Initializing IpDimensionResolver");
-        return new com.geek.ratelimit4j.starter.resolver.IpDimensionResolver();
+        return new IpDimensionResolver();
     }
 
     /**
@@ -346,9 +353,9 @@ public class RateLimitAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public com.geek.ratelimit4j.core.resolver.DimensionResolver userDimensionResolver() {
+    public DimensionResolver userDimensionResolver() {
         log.info("[RateLimit4j] Initializing UserDimensionResolver");
-        return new com.geek.ratelimit4j.starter.resolver.UserDimensionResolver();
+        return new UserDimensionResolver();
     }
 
     /**
@@ -356,9 +363,9 @@ public class RateLimitAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public com.geek.ratelimit4j.core.resolver.DimensionResolver tenantDimensionResolver() {
+    public DimensionResolver tenantDimensionResolver() {
         log.info("[RateLimit4j] Initializing TenantDimensionResolver");
-        return new com.geek.ratelimit4j.starter.resolver.TenantDimensionResolver();
+        return new TenantDimensionResolver();
     }
 
     /**
@@ -366,9 +373,9 @@ public class RateLimitAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public com.geek.ratelimit4j.core.resolver.DimensionResolver deviceDimensionResolver() {
+    public DimensionResolver deviceDimensionResolver() {
         log.info("[RateLimit4j] Initializing DeviceDimensionResolver");
-        return new com.geek.ratelimit4j.starter.resolver.DeviceDimensionResolver();
+        return new DeviceDimensionResolver();
     }
 
     /**
@@ -376,33 +383,97 @@ public class RateLimitAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public com.geek.ratelimit4j.core.resolver.DimensionResolver methodDimensionResolver() {
+    public DimensionResolver methodDimensionResolver() {
         log.info("[RateLimit4j] Initializing MethodDimensionResolver");
-        return new com.geek.ratelimit4j.starter.resolver.MethodDimensionResolver();
+        return new MethodDimensionResolver();
+    }
+
+    // ==================== Key解析器 ====================
+
+    /**
+     * 配置Builder方式Key解析器
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public BuilderRateLimitKeyResolver builderRateLimitKeyResolver(
+            ApplicationContext applicationContext) {
+        log.info("[RateLimit4j] Initializing BuilderRateLimitKeyResolver");
+        return new BuilderRateLimitKeyResolver(applicationContext);
+    }
+
+    /**
+     * 配置SpEL方式Key解析器
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public SpelRateLimitKeyResolver spelRateLimitKeyResolver() {
+        log.info("[RateLimit4j] Initializing SpelRateLimitKeyResolver");
+        return new SpelRateLimitKeyResolver();
+    }
+
+    /**
+     * 配置维度Key解析器
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public DimensionRateLimitKeyResolver dimensionRateLimitKeyResolver(DimensionResolverRegistry dimensionResolverRegistry) {
+        log.info("[RateLimit4j] Initializing DimensionRateLimitKeyResolver");
+        return new DimensionRateLimitKeyResolver(dimensionResolverRegistry);
+    }
+
+    /**
+     * 配置方法名Key解析器
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public MethodRateLimitKeyResolver methodRateLimitKeyResolver() {
+        log.info("[RateLimit4j] Initializing MethodRateLimitKeyResolver");
+        return new com.geek.ratelimit4j.starter.resolver.MethodRateLimitKeyResolver();
+    }
+
+    /**
+     * 配置组合Key解析器
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public CompositeRateLimitKeyResolver compositeRateLimitKeyResolver(List<RateLimitKeyResolver> resolvers) {
+        log.info("[RateLimit4j] Initializing CompositeRateLimitKeyResolver with {} resolvers", resolvers.size());
+        return new CompositeRateLimitKeyResolver(resolvers);
     }
 
     // ==================== 限流切面 ====================
+
+    /**
+     * 配置引擎提供者注册中心
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public EngineProviderRegistry engineProviderRegistry(List<RateLimitEngineProvider> providers) {
+        log.info("[RateLimit4j] Initializing DefaultEngineProviderRegistry with {} providers", providers.size());
+        return new DefaultEngineProviderRegistry(providers, properties.getPrimaryEngine());
+    }
 
     /**
      * 配置限流切面
      *
      * @param algorithmRegistry        算法注册中心
      * @param applicationContext       Spring应用上下文
-     * @param dimensionResolverRegistry 维度解析器注册中心
+     * @param compositeKeyResolver     Key解析器
      * @param telemetry                监控组件（可选）
+     * @param engineProviderRegistry   引擎提供者注册中心
      * @return 限流切面
      */
     @Bean
     @ConditionalOnMissingBean
-    public RateLimitAspect rateLimitAspect(
+    public DefaultRateLimitAspect rateLimitAspect(
             AlgorithmRegistry algorithmRegistry,
             ApplicationContext applicationContext,
-            com.geek.ratelimit4j.core.resolver.DimensionResolverRegistry dimensionResolverRegistry,
-            @Autowired(required = false) RateLimitTelemetry telemetry) {
+            CompositeRateLimitKeyResolver compositeKeyResolver,
+            @Autowired(required = false) RateLimitTelemetry telemetry,
+            EngineProviderRegistry engineProviderRegistry) {
 
-        log.info("[RateLimit4j] Initializing rate limit aspect with primary engine: {}",
-                 properties.getPrimaryEngine());
-
-        return new RateLimitAspect(algorithmRegistry, applicationContext, properties, dimensionResolverRegistry, telemetry);
+        log.info("[RateLimit4j] Initializing DefaultRateLimitAspect");
+        return new DefaultRateLimitAspect(algorithmRegistry, applicationContext, telemetry, 
+                compositeKeyResolver, properties, engineProviderRegistry);
     }
 }
