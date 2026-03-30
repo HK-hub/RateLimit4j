@@ -20,8 +20,11 @@ import com.geek.ratelimit4j.starter.annotation.RateLimits;
 import com.geek.ratelimit4j.starter.annotation.TenantRateLimit;
 import com.geek.ratelimit4j.starter.annotation.UserRateLimit;
 import com.geek.ratelimit4j.starter.handler.FallbackHandler;
-import com.geek.ratelimit4j.starter.resolver.DimensionKeyResolver;
+import com.geek.ratelimit4j.core.registry.AlgorithmRegistry;
+import com.geek.ratelimit4j.core.resolver.DimensionResolverRegistry;
+import com.geek.ratelimit4j.starter.resolver.DefaultDimensionResolveContext;
 import com.geek.ratelimit4j.starter.resolver.KeyBuilder;
+import com.geek.ratelimit4j.starter.autoconfigure.RateLimitProperties;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.BooleanUtils;
@@ -30,6 +33,7 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.expression.EvaluationContext;
 import org.springframework.expression.Expression;
@@ -38,11 +42,7 @@ import org.springframework.expression.spel.support.StandardEvaluationContext;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -66,97 +66,65 @@ import java.util.concurrent.ConcurrentHashMap;
 @Getter
 public class RateLimitAspect {
 
-    // ==================== 成员变量 ====================
+// ==================== 成员变量 ====================
 
     /**
      * SpEL表达式解析器
-     * 线程安全，全局单例即可
      */
     private final SpelExpressionParser spelParser = new SpelExpressionParser();
 
     /**
-     * 本地算法缓存
-     * Key: 算法类型, Value: 算法实现
+     * 算法注册中心
      */
-    private final Map<AlgorithmType, RateLimitAlgorithm> localAlgorithmCache = new ConcurrentHashMap<>();
-
-    /**
-     * Redis算法缓存
-     * Key: 算法类型, Value: 算法实现
-     */
-    private final Map<AlgorithmType, RateLimitAlgorithm> redisAlgorithmCache = new ConcurrentHashMap<>();
+    private final AlgorithmRegistry algorithmRegistry;
 
     /**
      * Spring应用上下文
-     * 用于获取FallbackHandler等Bean
      */
     private final ApplicationContext applicationContext;
 
     /**
      * 监控组件
-     * 可选，用于记录限流指标
      */
     private final RateLimitTelemetry telemetry;
 
     /**
-     * 主引擎类型
-     * 当注解指定AUTO时使用此引擎
-     * 如果为null，则从容器中按Order排序选择第一个可用引擎
+     * 限流配置属性
      */
-    private EngineType primaryEngine;
+    private final RateLimitProperties properties;
 
     /**
-     * 维度Key解析器
-     * 用于解析预定义维度的Key值
+     * 维度解析器注册中心
      */
-    private final DimensionKeyResolver dimensionKeyResolver;
+    private final DimensionResolverRegistry dimensionResolverRegistry;
 
     // ==================== 构造函数 ====================
 
     /**
      * 构造限流切面
      *
-     * @param tokenBucket        本地令牌桶算法
-     * @param leakyBucket        本地漏桶算法
-     * @param fixedWindow        本地固定窗口算法
-     * @param slidingWindowLog   本地滑动窗口日志算法
-     * @param slidingWindowCounter 本地滑动窗口计数器算法
-     * @param applicationContext Spring应用上下文
-     * @param telemetry          监控组件
+     * @param algorithmRegistry         算法注册中心
+     * @param applicationContext        Spring应用上下文
+     * @param properties                限流配置属性
+     * @param dimensionResolverRegistry 维度解析器注册中心
+     * @param telemetry                 监控组件
      */
     public RateLimitAspect(
-            LocalTokenBucketAlgorithm tokenBucket,
-            LocalLeakyBucketAlgorithm leakyBucket,
-            LocalFixedWindowAlgorithm fixedWindow,
-            LocalSlidingWindowLogAlgorithm slidingWindowLog,
-            LocalSlidingWindowCounterAlgorithm slidingWindowCounter,
-            org.springframework.context.ApplicationContext applicationContext,
+            AlgorithmRegistry algorithmRegistry,
+            ApplicationContext applicationContext,
+            RateLimitProperties properties,
+            DimensionResolverRegistry dimensionResolverRegistry,
             RateLimitTelemetry telemetry) {
-        // 初始化应用上下文
+        this.algorithmRegistry = algorithmRegistry;
         this.applicationContext = applicationContext;
-        // 初始化监控组件
+        this.properties = properties;
+        this.dimensionResolverRegistry = dimensionResolverRegistry;
         this.telemetry = telemetry;
-        // primaryEngine初始化为null，由配置类设置或从容器中查找
-        this.primaryEngine = null;
-        // 初始化维度Key解析器
-        this.dimensionKeyResolver = new DimensionKeyResolver();
 
-        // 注册本地算法到缓存
-        if (Objects.nonNull(tokenBucket)) {
-            localAlgorithmCache.put(AlgorithmType.TOKEN_BUCKET, tokenBucket);
-        }
-        if (Objects.nonNull(leakyBucket)) {
-            localAlgorithmCache.put(AlgorithmType.LEAKY_BUCKET, leakyBucket);
-        }
-        if (Objects.nonNull(fixedWindow)) {
-            localAlgorithmCache.put(AlgorithmType.FIXED_WINDOW, fixedWindow);
-        }
-        if (Objects.nonNull(slidingWindowLog)) {
-            localAlgorithmCache.put(AlgorithmType.SLIDING_WINDOW_LOG, slidingWindowLog);
-        }
-        if (Objects.nonNull(slidingWindowCounter)) {
-            localAlgorithmCache.put(AlgorithmType.SLIDING_WINDOW_COUNTER, slidingWindowCounter);
-        }
+        log.info("[RateLimit4j] RateLimitAspect initialized with {} local algorithms, {} redis algorithms, primaryEngine={}",
+                 algorithmRegistry.getAlgorithmCount(EngineType.LOCAL),
+                 algorithmRegistry.getAlgorithmCount(EngineType.REDIS),
+                 properties.getPrimaryEngine());
     }
 
     // ==================== 切面方法 ====================
@@ -191,10 +159,7 @@ public class RateLimitAspect {
     @Around("@annotation(rateLimits)")
     public Object aroundMultiple(ProceedingJoinPoint joinPoint, RateLimits rateLimits) throws Throwable {
         // 转换为数组列表
-        List<RateLimit> rateLimitList = new ArrayList<>();
-        for (RateLimit rl : rateLimits.value()) {
-            rateLimitList.add(rl);
-        }
+        List<RateLimit> rateLimitList = new ArrayList<>(Arrays.asList(rateLimits.value()));
         // 调用统一处理方法
         return processRateLimits(joinPoint, rateLimitList);
     }
@@ -360,34 +325,6 @@ public class RateLimitAspect {
         }
     }
 
-    /**
-     * 根据维度解析Key
-     */
-    private String resolveKeyByDimension(ProceedingJoinPoint joinPoint, DimensionType dimension, String keyPrefix) {
-        // 使用维度解析器解析Key
-        String dimensionKey = dimensionKeyResolver.resolve(joinPoint, dimension);
-        
-        // 校验维度Key是否为空
-        if (StringUtils.isBlank(dimensionKey)) {
-            throw new IllegalStateException(
-                    "Dimension resolver returned empty key for dimension: " + dimension.getCode());
-        }
-
-        // 构建完整Key
-        StringBuilder fullKey = new StringBuilder();
-        
-        // 添加前缀
-        if (StringUtils.isNotBlank(keyPrefix)) {
-            fullKey.append(keyPrefix).append(":");
-        }
-
-        // 添加维度前缀
-        fullKey.append(dimension.getCode()).append(":");
-        // 添加维度值
-        fullKey.append(dimensionKey);
-
-        return fullKey.toString();
-    }
 
     /**
      * 使用SpEL解析表达式
@@ -485,72 +422,83 @@ public class RateLimitAspect {
 
     /**
      * 解析限流引擎
-     * AUTO时使用配置的primary引擎
      *
      * @param engine 注解指定的引擎类型
      * @return 实际使用的引擎类型
      */
     private EngineType resolveEngine(EngineType engine) {
-        if (engine == EngineType.AUTO) {
-            if (this.primaryEngine != null && isEngineAvailable(this.primaryEngine)) {
-                return this.primaryEngine;
+        if (engine != EngineType.AUTO) {
+            if (!isEngineAvailable(engine)) {
+                throw new NoSuchRateLimitEngineException(engine);
             }
-            return resolveEngineFromProviders();
+            return engine;
         }
-        if (!isEngineAvailable(engine)) {
-            throw new NoSuchRateLimitEngineException(engine);
+
+        EngineType primaryEngine = properties.getPrimaryEngine();
+        if (Objects.nonNull(primaryEngine) && isEngineAvailable(primaryEngine)) {
+            return primaryEngine;
         }
-        return engine;
+
+        return resolveEngineFromProviders();
     }
 
     private boolean isEngineAvailable(EngineType engine) {
-        if (engine == EngineType.REDIS) {
-            return !redisAlgorithmCache.isEmpty();
-        }
-        if (engine == EngineType.LOCAL) {
-            return !localAlgorithmCache.isEmpty();
-        }
-        return false;
+        return algorithmRegistry.hasEngineAlgorithms(engine);
     }
 
     private EngineType resolveEngineFromProviders() {
-        Map<String, RateLimitEngineProvider> providers = 
+        Map<String, RateLimitEngineProvider> providers =
             applicationContext.getBeansOfType(RateLimitEngineProvider.class);
         return providers.values().stream()
             .sorted(Comparator.comparingInt(RateLimitEngineProvider::getOrder))
-            .findFirst()
             .map(RateLimitEngineProvider::getEngineType)
+            .filter(this::isEngineAvailable)
+            .findFirst()
             .orElseThrow(() -> new NoSuchRateLimitEngineException(null));
     }
 
     /**
      * 获取限流算法
-     * 根据算法类型和引擎类型获取对应的算法实现
      *
      * @param algorithmType 算法类型
      * @param engine        引擎类型
      * @return 限流算法实现
      */
     private RateLimitAlgorithm getAlgorithm(AlgorithmType algorithmType, EngineType engine) {
-        // 根据引擎类型选择算法缓存
-        Map<AlgorithmType, RateLimitAlgorithm> cache = 
-                engine == EngineType.REDIS ? redisAlgorithmCache : localAlgorithmCache;
-        
-        // 从缓存中获取算法
-        return cache.get(algorithmType);
+        RateLimitAlgorithm algorithm = algorithmRegistry.getAlgorithm(algorithmType, engine);
+        if (Objects.isNull(algorithm)) {
+            throw new IllegalArgumentException(
+                    String.format("No algorithm found for type=%s, engine=%s",
+                                  algorithmType.getCode(), engine.getCode()));
+        }
+        return algorithm;
     }
 
     /**
-     * 注册Redis算法
-     * 由配置类调用，注入Redis算法实现
-     *
-     * @param algorithmType 算法类型
-     * @param algorithm     算法实现
+     * 根据维度解析Key
      */
-    public void registerRedisAlgorithm(AlgorithmType algorithmType, RateLimitAlgorithm algorithm) {
-        // 注册到Redis算法缓存
-        redisAlgorithmCache.put(algorithmType, algorithm);
+    private String resolveKeyByDimension(ProceedingJoinPoint joinPoint, DimensionType dimension, String keyPrefix) {
+        DefaultDimensionResolveContext context = new DefaultDimensionResolveContext(joinPoint);
+
+        String dimensionKey = dimensionResolverRegistry.resolve(dimension, context);
+
+        if (StringUtils.isBlank(dimensionKey)) {
+            throw new IllegalStateException(
+                    "Dimension resolver returned empty key for dimension: " + dimension.getCode());
+        }
+
+        StringBuilder fullKey = new StringBuilder();
+
+        if (StringUtils.isNotBlank(keyPrefix)) {
+            fullKey.append(keyPrefix).append(":");
+        }
+
+        fullKey.append(dimension.getCode()).append(":");
+        fullKey.append(dimensionKey);
+
+        return fullKey.toString();
     }
+
 
     // ==================== 配置构建方法 ====================
 
@@ -575,25 +523,29 @@ public class RateLimitAspect {
 
     // ==================== 降级处理方法 ====================
 
-    /**
+/**
      * 处理限流拒绝
-     * 调用降级处理器处理被拒绝的请求
+     * 根据注解配置决定是否执行降级处理
      *
      * @param joinPoint 切点信息
-     * @param rateLimit 限流注解
+     * @param rateLimit  限流注解
      * @param key       限流Key
      * @param result    限流结果
      * @return 降级处理结果
+     * @throws RuntimeException 未指定降级处理器时抛出限流异常
      */
     private Object handleRejection(ProceedingJoinPoint joinPoint, RateLimit rateLimit, String key, RateLimitResult result) {
-        // 创建限流异常
         RuntimeException exception = createRateLimitException(rateLimit, key, result);
-        // 获取降级处理器
-        FallbackHandler fallbackHandler = getFallbackHandler(rateLimit.fallbackHandler());
 
-        // 检查异常类型
+        Class<? extends FallbackHandler> handlerClass = rateLimit.fallbackHandler();
+
+        if (Objects.equals(handlerClass, FallbackHandler.class)) {
+            throw exception;
+        }
+
+        FallbackHandler fallbackHandler = getFallbackHandler(handlerClass);
+
         if (exception instanceof RateLimitException) {
-            // 调用降级处理器处理
             return fallbackHandler.handle(joinPoint, (RateLimitException) exception);
         }
         // 其他异常类型，包装为RateLimitException
@@ -602,31 +554,20 @@ public class RateLimitAspect {
 
     /**
      * 获取降级处理器
-     * 从Spring容器中查找指定类型的降级处理器
      *
      * @param handlerClass 降级处理器类型
      * @return 降级处理器实例
+     * @throws IllegalStateException 未找到指定类型的处理器时抛出
      */
     private FallbackHandler getFallbackHandler(Class<? extends FallbackHandler> handlerClass) {
+
         try {
-            // 从容器中获取所有FallbackHandler Bean
-            Map<String, FallbackHandler> handlers = applicationContext.getBeansOfType(FallbackHandler.class);
-            
-            // 遍历查找匹配的处理器
-            for (FallbackHandler handler : handlers.values()) {
-                if (handler.getClass().equals(handlerClass)) {
-                    return handler;
-                }
-            }
-            
-            // 未找到指定类型，返回第一个可用的处理器
-            return handlers.values().stream()
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalStateException("No FallbackHandler found"));
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to get FallbackHandler: " + handlerClass.getName(), e);
+            return applicationContext.getBean(handlerClass);
+        } catch (BeansException e){
+            throw new IllegalStateException("FallbackHandler not found: " + handlerClass.getName(), e);
         }
     }
+
 
     /**
      * 创建限流异常
