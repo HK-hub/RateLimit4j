@@ -1,9 +1,6 @@
 package com.geek.ratelimit4j.starter.autoconfigure;
 
-import com.geek.ratelimit4j.core.algorithm.AlgorithmType;
-import com.geek.ratelimit4j.core.config.EngineType;
 import com.geek.ratelimit4j.core.config.RateLimitConfig;
-import com.geek.ratelimit4j.core.engine.RateLimitEngineProvider;
 import com.geek.ratelimit4j.core.storage.StorageProvider;
 import com.geek.ratelimit4j.core.telemetry.RateLimitTelemetry;
 import com.geek.ratelimit4j.local.algorithm.*;
@@ -17,23 +14,32 @@ import com.geek.ratelimit4j.redis.algorithm.RedisTokenBucketAlgorithm;
 import com.geek.ratelimit4j.redis.engine.RedisEngineProvider;
 import com.geek.ratelimit4j.redis.storage.RedisStorageProvider;
 import com.geek.ratelimit4j.starter.aspect.RateLimitAspect;
+import com.geek.ratelimit4j.core.registry.AlgorithmRegistry;
+import com.geek.ratelimit4j.starter.registry.DefaultAlgorithmRegistry;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
-import java.util.Objects;
-
 /**
  * RateLimit4j 自动配置类
+ *
+ * <p>设计改进：</p>
+ * <ul>
+ *   <li>基于AlgorithmRegistry自动发现算法，遵循开闭原则</li>
+ *   <li>新增算法无需修改配置类</li>
+ *   <li>所有算法Bean添加@ConditionalOnMissingBean，支持用户自定义扩展</li>
+ * </ul>
  *
  * <p>功能特性：</p>
  * <ul>
@@ -41,6 +47,7 @@ import java.util.Objects;
  *   <li>支持5种限流算法</li>
  *   <li>支持通过配置指定主引擎</li>
  *   <li>支持OpenTelemetry监控</li>
+ *   <li>支持用户自定义算法替换</li>
  * </ul>
  *
  * @author RateLimit4j
@@ -68,6 +75,23 @@ public class RateLimitAutoConfiguration {
         this.properties = properties;
     }
 
+    // ==================== 算法注册中心 ====================
+
+    /**
+     * 配置算法注册中心
+     * 自动收集所有RateLimitAlgorithm Bean
+     *
+     * @param algorithmsProvider 算法列表提供者（Spring自动收集所有RateLimitAlgorithm Bean）
+     * @return 算法注册中心
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public AlgorithmRegistry algorithmRegistry(
+            ObjectProvider<java.util.List<com.geek.ratelimit4j.core.algorithm.RateLimitAlgorithm>> algorithmsProvider) {
+        log.info("[RateLimit4j] Initializing AlgorithmRegistry");
+        return new DefaultAlgorithmRegistry(algorithmsProvider);
+    }
+
     // ==================== Redis存储和算法 ====================
 
     /**
@@ -78,12 +102,12 @@ public class RateLimitAutoConfiguration {
      * @return Redis存储提供者
      */
     @Bean
+    @ConditionalOnMissingBean
     @ConditionalOnClass(RedissonClient.class)
     @ConditionalOnBean(RedissonClient.class)
     @ConditionalOnProperty(prefix = "ratelimit4j.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
     public StorageProvider redisStorageProvider(RedissonClient redissonClient) {
         log.info("[RateLimit4j] Initializing Redis storage provider");
-        // 创建Redis存储提供者
         return new RedisStorageProvider(redissonClient);
     }
 
@@ -94,13 +118,12 @@ public class RateLimitAutoConfiguration {
      * @return Redis令牌桶算法
      */
     @Bean
+    @ConditionalOnMissingBean(RedisTokenBucketAlgorithm.class)
     @ConditionalOnBean(RedissonClient.class)
     @ConditionalOnProperty(prefix = "ratelimit4j.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
     public RedisTokenBucketAlgorithm redisTokenBucketAlgorithm(RedissonClient redissonClient) {
         log.info("[RateLimit4j] Initializing Redis token bucket algorithm");
-        // 构建默认配置
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("redis-token-bucket");
-        // 创建Redis令牌桶算法
         return new RedisTokenBucketAlgorithm(redissonClient, config);
     }
 
@@ -111,13 +134,12 @@ public class RateLimitAutoConfiguration {
      * @return Redis固定窗口算法
      */
     @Bean
+    @ConditionalOnMissingBean(RedisFixedWindowAlgorithm.class)
     @ConditionalOnBean(RedissonClient.class)
     @ConditionalOnProperty(prefix = "ratelimit4j.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
     public RedisFixedWindowAlgorithm redisFixedWindowAlgorithm(RedissonClient redissonClient) {
         log.info("[RateLimit4j] Initializing Redis fixed window algorithm");
-        // 构建默认配置
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("redis-fixed-window");
-        // 创建Redis固定窗口算法
         return new RedisFixedWindowAlgorithm(redissonClient, config);
     }
 
@@ -128,13 +150,12 @@ public class RateLimitAutoConfiguration {
      * @return Redis滑动窗口日志算法
      */
     @Bean
+    @ConditionalOnMissingBean(RedisSlidingWindowLogAlgorithm.class)
     @ConditionalOnBean(RedissonClient.class)
     @ConditionalOnProperty(prefix = "ratelimit4j.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
     public RedisSlidingWindowLogAlgorithm redisSlidingWindowLogAlgorithm(RedissonClient redissonClient) {
         log.info("[RateLimit4j] Initializing Redis sliding window log algorithm");
-        // 构建默认配置
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("redis-sliding-window-log");
-        // 创建Redis滑动窗口日志算法
         return new RedisSlidingWindowLogAlgorithm(redissonClient, config);
     }
 
@@ -145,13 +166,12 @@ public class RateLimitAutoConfiguration {
      * @return Redis滑动窗口计数器算法
      */
     @Bean
+    @ConditionalOnMissingBean(RedisSlidingWindowCounterAlgorithm.class)
     @ConditionalOnBean(RedissonClient.class)
     @ConditionalOnProperty(prefix = "ratelimit4j.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
     public RedisSlidingWindowCounterAlgorithm redisSlidingWindowCounterAlgorithm(RedissonClient redissonClient) {
         log.info("[RateLimit4j] Initializing Redis sliding window counter algorithm");
-        // 构建默认配置
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("redis-sliding-window-counter");
-        // 创建Redis滑动窗口计数器算法
         return new RedisSlidingWindowCounterAlgorithm(redissonClient, config);
     }
 
@@ -162,13 +182,12 @@ public class RateLimitAutoConfiguration {
      * @return Redis漏桶算法
      */
     @Bean
+    @ConditionalOnMissingBean(RedisLeakyBucketAlgorithm.class)
     @ConditionalOnBean(RedissonClient.class)
     @ConditionalOnProperty(prefix = "ratelimit4j.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
     public RedisLeakyBucketAlgorithm redisLeakyBucketAlgorithm(RedissonClient redissonClient) {
         log.info("[RateLimit4j] Initializing Redis leaky bucket algorithm");
-        // 构建默认配置
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("redis-leaky-bucket");
-        // 创建Redis漏桶算法
         return new RedisLeakyBucketAlgorithm(redissonClient, config);
     }
 
@@ -180,11 +199,10 @@ public class RateLimitAutoConfiguration {
      * @return 本地令牌桶算法
      */
     @Bean
+    @ConditionalOnMissingBean(LocalTokenBucketAlgorithm.class)
     public LocalTokenBucketAlgorithm localTokenBucketAlgorithm() {
         log.info("[RateLimit4j] Initializing local token bucket algorithm");
-        // 构建默认配置
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("local-token-bucket");
-        // 创建本地令牌桶算法
         return new LocalTokenBucketAlgorithm(config);
     }
 
@@ -194,11 +212,10 @@ public class RateLimitAutoConfiguration {
      * @return 本地漏桶算法
      */
     @Bean
+    @ConditionalOnMissingBean(LocalLeakyBucketAlgorithm.class)
     public LocalLeakyBucketAlgorithm localLeakyBucketAlgorithm() {
         log.info("[RateLimit4j] Initializing local leaky bucket algorithm");
-        // 构建默认配置
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("local-leaky-bucket");
-        // 创建本地漏桶算法
         return new LocalLeakyBucketAlgorithm(config);
     }
 
@@ -208,11 +225,10 @@ public class RateLimitAutoConfiguration {
      * @return 本地固定窗口算法
      */
     @Bean
+    @ConditionalOnMissingBean(LocalFixedWindowAlgorithm.class)
     public LocalFixedWindowAlgorithm localFixedWindowAlgorithm() {
         log.info("[RateLimit4j] Initializing local fixed window algorithm");
-        // 构建默认配置
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("local-fixed-window");
-        // 创建本地固定窗口算法
         return new LocalFixedWindowAlgorithm(config);
     }
 
@@ -222,11 +238,10 @@ public class RateLimitAutoConfiguration {
      * @return 本地滑动窗口日志算法
      */
     @Bean
+    @ConditionalOnMissingBean(LocalSlidingWindowLogAlgorithm.class)
     public LocalSlidingWindowLogAlgorithm localSlidingWindowLogAlgorithm() {
         log.info("[RateLimit4j] Initializing local sliding window log algorithm");
-        // 构建默认配置
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("local-sliding-window-log");
-        // 创建本地滑动窗口日志算法
         return new LocalSlidingWindowLogAlgorithm(config);
     }
 
@@ -236,11 +251,10 @@ public class RateLimitAutoConfiguration {
      * @return 本地滑动窗口计数器算法
      */
     @Bean
+    @ConditionalOnMissingBean(LocalSlidingWindowCounterAlgorithm.class)
     public LocalSlidingWindowCounterAlgorithm localSlidingWindowCounterAlgorithm() {
         log.info("[RateLimit4j] Initializing local sliding window counter algorithm");
-        // 构建默认配置
         RateLimitConfig config = properties.getDefaultRule().toRateLimitConfig("local-sliding-window-counter");
-        // 创建本地滑动窗口计数器算法
         return new LocalSlidingWindowCounterAlgorithm(config);
     }
 
@@ -253,9 +267,9 @@ public class RateLimitAutoConfiguration {
      * @return 本地引擎提供者
      */
     @Bean
+    @ConditionalOnMissingBean
     public LocalEngineProvider localEngineProvider() {
         log.info("[RateLimit4j] Initializing local engine provider");
-        // 创建本地引擎提供者
         return new LocalEngineProvider();
     }
 
@@ -267,11 +281,11 @@ public class RateLimitAutoConfiguration {
      * @return Redis引擎提供者
      */
     @Bean
+    @ConditionalOnMissingBean
     @ConditionalOnBean(RedissonClient.class)
     @ConditionalOnProperty(prefix = "ratelimit4j.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
     public RedisEngineProvider redisEngineProvider(RedissonClient redissonClient) {
         log.info("[RateLimit4j] Initializing Redis engine provider");
-        // 创建Redis引擎提供者
         return new RedisEngineProvider(redissonClient);
     }
 
@@ -284,11 +298,10 @@ public class RateLimitAutoConfiguration {
      * @return 熔断器实例
      */
     @Bean
+    @ConditionalOnMissingBean
     public CircuitBreaker circuitBreaker() {
         log.info("[RateLimit4j] Initializing circuit breaker");
-        // 获取降级配置
         RateLimitProperties.FallbackConfig fallbackConfig = properties.getFallback();
-        // 创建熔断器
         return new CircuitBreaker(
                 "default-circuit-breaker",
                 fallbackConfig.getFailureThreshold(),
@@ -296,70 +309,100 @@ public class RateLimitAutoConfiguration {
         );
     }
 
-    // ==================== 其他组件 ====================
+    // ==================== 维度解析器 ====================
+
+    /**
+     * 配置维度解析器注册中心
+     * 自动收集所有DimensionResolver Bean
+     *
+     * @param resolvers 所有维度解析器
+     * @return 解析器注册中心
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public com.geek.ratelimit4j.core.resolver.DimensionResolverRegistry dimensionResolverRegistry(
+            java.util.List<com.geek.ratelimit4j.core.resolver.DimensionResolver> resolvers) {
+        log.info("[RateLimit4j] Initializing DimensionResolverRegistry with {} resolvers", resolvers.size());
+        com.geek.ratelimit4j.core.resolver.DimensionResolverRegistry registry =
+                new com.geek.ratelimit4j.core.resolver.DimensionResolverRegistry();
+        for (com.geek.ratelimit4j.core.resolver.DimensionResolver resolver : resolvers) {
+            registry.register(resolver);
+        }
+        return registry;
+    }
+
+    /**
+     * 配置IP维度解析器
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public com.geek.ratelimit4j.core.resolver.DimensionResolver ipDimensionResolver() {
+        log.info("[RateLimit4j] Initializing IpDimensionResolver");
+        return new com.geek.ratelimit4j.starter.resolver.IpDimensionResolver();
+    }
+
+    /**
+     * 配置用户维度解析器
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public com.geek.ratelimit4j.core.resolver.DimensionResolver userDimensionResolver() {
+        log.info("[RateLimit4j] Initializing UserDimensionResolver");
+        return new com.geek.ratelimit4j.starter.resolver.UserDimensionResolver();
+    }
+
+    /**
+     * 配置租户维度解析器
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public com.geek.ratelimit4j.core.resolver.DimensionResolver tenantDimensionResolver() {
+        log.info("[RateLimit4j] Initializing TenantDimensionResolver");
+        return new com.geek.ratelimit4j.starter.resolver.TenantDimensionResolver();
+    }
+
+    /**
+     * 配置设备维度解析器
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public com.geek.ratelimit4j.core.resolver.DimensionResolver deviceDimensionResolver() {
+        log.info("[RateLimit4j] Initializing DeviceDimensionResolver");
+        return new com.geek.ratelimit4j.starter.resolver.DeviceDimensionResolver();
+    }
+
+    /**
+     * 配置方法维度解析器
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public com.geek.ratelimit4j.core.resolver.DimensionResolver methodDimensionResolver() {
+        log.info("[RateLimit4j] Initializing MethodDimensionResolver");
+        return new com.geek.ratelimit4j.starter.resolver.MethodDimensionResolver();
+    }
+
+    // ==================== 限流切面 ====================
 
     /**
      * 配置限流切面
      *
-     * @param tokenBucket          本地令牌桶算法
-     * @param leakyBucket          本地漏桶算法
-     * @param fixedWindow          本地固定窗口算法
-     * @param slidingWindowLog     本地滑动窗口日志算法
-     * @param slidingWindowCounter 本地滑动窗口计数器算法
-     * @param applicationContext   Spring应用上下文
-     * @param telemetry            监控组件
-     * @param redisTokenBucket     Redis令牌桶算法（可选）
-     * @param redisFixedWindow     Redis固定窗口算法（可选）
-     * @param redisSlidingWindowLog Redis滑动窗口日志算法（可选）
-     * @param redisSlidingWindowCounter Redis滑动窗口计数器算法（可选）
-     * @param redisLeakyBucket     Redis漏桶算法（可选）
+     * @param algorithmRegistry        算法注册中心
+     * @param applicationContext       Spring应用上下文
+     * @param dimensionResolverRegistry 维度解析器注册中心
+     * @param telemetry                监控组件（可选）
      * @return 限流切面
      */
     @Bean
+    @ConditionalOnMissingBean
     public RateLimitAspect rateLimitAspect(
-            LocalTokenBucketAlgorithm tokenBucket,
-            LocalLeakyBucketAlgorithm leakyBucket,
-            LocalFixedWindowAlgorithm fixedWindow,
-            LocalSlidingWindowLogAlgorithm slidingWindowLog,
-            LocalSlidingWindowCounterAlgorithm slidingWindowCounter,
+            AlgorithmRegistry algorithmRegistry,
             ApplicationContext applicationContext,
-            @Autowired(required = false) RateLimitTelemetry telemetry,
-            @Autowired(required = false) RedisTokenBucketAlgorithm redisTokenBucket,
-            @Autowired(required = false) RedisFixedWindowAlgorithm redisFixedWindow,
-            @Autowired(required = false) RedisSlidingWindowLogAlgorithm redisSlidingWindowLog,
-            @Autowired(required = false) RedisSlidingWindowCounterAlgorithm redisSlidingWindowCounter,
-            @Autowired(required = false) RedisLeakyBucketAlgorithm redisLeakyBucket) {
+            com.geek.ratelimit4j.core.resolver.DimensionResolverRegistry dimensionResolverRegistry,
+            @Autowired(required = false) RateLimitTelemetry telemetry) {
 
-        log.info("[RateLimit4j] Initializing rate limit aspect with primary engine: {}", 
+        log.info("[RateLimit4j] Initializing rate limit aspect with primary engine: {}",
                  properties.getPrimaryEngine());
 
-        // 创建限流切面
-        RateLimitAspect aspect = new RateLimitAspect(
-                tokenBucket, leakyBucket, fixedWindow,
-                slidingWindowLog, slidingWindowCounter, applicationContext, telemetry);
-
-        // 注册Redis算法（如果存在）
-        if (Objects.nonNull(redisTokenBucket)) {
-            log.info("[RateLimit4j] Registering Redis token bucket algorithm");
-            aspect.registerRedisAlgorithm(AlgorithmType.TOKEN_BUCKET, redisTokenBucket);
-        }
-        if (Objects.nonNull(redisFixedWindow)) {
-            log.info("[RateLimit4j] Registering Redis fixed window algorithm");
-            aspect.registerRedisAlgorithm(AlgorithmType.FIXED_WINDOW, redisFixedWindow);
-        }
-        if (Objects.nonNull(redisSlidingWindowLog)) {
-            log.info("[RateLimit4j] Registering Redis sliding window log algorithm");
-            aspect.registerRedisAlgorithm(AlgorithmType.SLIDING_WINDOW_LOG, redisSlidingWindowLog);
-        }
-        if (Objects.nonNull(redisSlidingWindowCounter)) {
-            log.info("[RateLimit4j] Registering Redis sliding window counter algorithm");
-            aspect.registerRedisAlgorithm(AlgorithmType.SLIDING_WINDOW_COUNTER, redisSlidingWindowCounter);
-        }
-        if (Objects.nonNull(redisLeakyBucket)) {
-            log.info("[RateLimit4j] Registering Redis leaky bucket algorithm");
-            aspect.registerRedisAlgorithm(AlgorithmType.LEAKY_BUCKET, redisLeakyBucket);
-        }
-
-        return aspect;
+        return new RateLimitAspect(algorithmRegistry, applicationContext, properties, dimensionResolverRegistry, telemetry);
     }
 }
