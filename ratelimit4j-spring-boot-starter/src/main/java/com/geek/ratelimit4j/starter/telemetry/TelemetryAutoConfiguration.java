@@ -4,6 +4,7 @@ import com.geek.ratelimit4j.core.telemetry.RateLimitTelemetry;
 import com.geek.ratelimit4j.core.telemetry.TelemetryConfig;
 import com.geek.ratelimit4j.starter.autoconfigure.RateLimitProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,6 +28,7 @@ public class TelemetryAutoConfiguration {
      * @return 监控实现
      */
     @Bean
+    @ConditionalOnMissingBean
     public RateLimitTelemetry rateLimitTelemetry(RateLimitProperties properties) {
         TelemetryConfig config = properties.getTelemetry().toTelemetryConfig();
         return new OpenTelemetryRateLimitTelemetry(config);
