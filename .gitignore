@@ -35,3 +35,16 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### AI IDE ###
+.agent/
+.claude/
+.codebuddy/
+.codex/
+.cursor/
+.gemini/
+.kilocode/
+.opencode/
+.pi/
+.qoder/
+.trae/
