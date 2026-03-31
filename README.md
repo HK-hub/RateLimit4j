@@ -22,6 +22,7 @@
   <img src="https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen?logo=spring" alt="Spring Boot 3.x">
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="License">
   <img src="https://img.shields.io/badge/Version-1.0.0-orange" alt="Version">
+  <img src="https://img.shields.io/badge/Test%20Coverage-5%25-red" alt="Test Coverage">
 </p>
 
 ---
@@ -419,6 +420,87 @@ RateLimit4j/
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## 📈 Project Status
+
+### ✅ Implemented Features
+
+| Module | Feature | Status | Description |
+|--------|---------|--------|-------------|
+| **Core** | Algorithm Types | ✅ Complete | 5 algorithms: Token Bucket, Leaky Bucket, Fixed Window, Sliding Window Log, Sliding Window Counter |
+| **Core** | Dimension Types | ✅ Complete | 6 dimensions: METHOD, IP, USER, TENANT, DEVICE, CUSTOM |
+| **Core** | @RateLimit Annotation | ✅ Complete | SpEL keys, KeyBuilder, dimension, multi-rule support |
+| **Core** | Dimension Annotations | ✅ Complete | @IpRateLimit, @UserRateLimit, @TenantRateLimit, @DeviceRateLimit |
+| **Core** | KeyBuilder/KeyResolver | ✅ Complete | Flexible key extraction interfaces |
+| **Core** | FallbackHandler | ✅ Complete | Customizable fallback handling |
+| **Core** | Telemetry | ✅ Complete | TelemetryEvent, TelemetryConfig interfaces |
+| **Local** | Token Bucket | ✅ Complete | High-performance local token bucket |
+| **Local** | Leaky Bucket | ✅ Complete | Smooth traffic output |
+| **Local** | Fixed Window | ✅ Complete | Simple and efficient |
+| **Local** | Sliding Window Log | ✅ Complete | Precise rate limiting |
+| **Local** | Sliding Window Counter | ✅ Complete | Balanced solution |
+| **Local** | Circuit Breaker | ✅ Complete | CLOSED/OPEN/HALF_OPEN states |
+| **Redis** | Token Bucket | ✅ Complete | Redisson RRateLimiter based |
+| **Redis** | Leaky Bucket | ✅ Complete | Distributed implementation |
+| **Redis** | Fixed Window | ✅ Complete | Redis Lua scripts |
+| **Redis** | Sliding Window Log | ✅ Complete | Distributed log algorithm |
+| **Redis** | Sliding Window Counter | ✅ Complete | Distributed counter algorithm |
+| **Starter** | Auto-Configuration | ✅ Complete | Spring Boot auto-config |
+| **Starter** | AOP Aspect | ✅ Complete | @RateLimit interception |
+| **Starter** | SpEL Key Resolver | ✅ Complete | Expression-based key extraction |
+| **Starter** | Dimension Resolvers | ✅ Complete | IP, User, Tenant, Device, Method resolvers |
+| **Starter** | OpenTelemetry | ✅ Complete | Metrics and tracing integration |
+
+### 🔧 Needs Improvement
+
+| Area | Issue | Priority | Description |
+|------|-------|----------|-------------|
+| **Testing** | Algorithm Tests | 🔴 High | Only LocalTokenBucketAlgorithmTest exists, other algorithms lack tests |
+| **Testing** | Redis Engine Tests | 🔴 High | No test coverage for Redis algorithms |
+| **Testing** | Starter Tests | 🔴 High | No integration tests for Spring Boot starter |
+| **Testing** | Dimension Resolver Tests | 🔴 High | No tests for IP/User/Tenant/Device resolvers |
+| **Testing** | Circuit Breaker Tests | 🔴 High | No unit tests for CircuitBreaker |
+| **Testing** | Key Resolver Tests | 🟡 Medium | SpEL and composite resolver tests missing |
+| **Docs** | Chinese README | 🟡 Medium | README_CN.md linked but not created |
+| **Docs** | API Documentation | 🟡 Medium | Missing Javadoc for public APIs |
+| **Docs** | Configuration Guide | 🟢 Low | Could add more configuration examples |
+| **Docs** | Migration Guide | 🟢 Low | Missing version upgrade guide |
+
+### ❌ Not Yet Implemented
+
+| Feature | Priority | Description |
+|---------|----------|-------------|
+| **MySQL Storage Engine** | 🟢 Low | Database-backed rate limiting |
+| **MongoDB Storage Engine** | 🟢 Low | NoSQL storage support |
+| **In-memory Caffeine Cache** | 🟡 Medium | High-performance local caching layer |
+| **Dynamic Configuration** | 🟡 Medium | Runtime rule updates without restart |
+| **Config Center Integration** | 🟡 Medium | Nacos/Apollo/Spring Cloud Config support |
+| **Prometheus Metrics** | 🟡 Medium | Native Prometheus exporter |
+| **Micrometer Integration** | 🟡 Medium | Spring Boot metrics compatibility |
+| **Health Check Endpoint** | 🟡 Medium | `/actuator/ratelimit` health indicator |
+| **Admin Dashboard** | 🟢 Low | Visual rate limit management UI |
+| **Rule Import/Export** | 🟢 Low | YAML/JSON rule configuration files |
+| **Anti-Bot Protection** | 🟢 Low | Smart bot detection algorithms |
+| **Blacklist/Whitelist** | 🟡 Medium | IP/User blocking functionality |
+| **Rate Limit Dashboard API** | 🟢 Low | RESTful admin API |
+| **Cluster-aware Local Engine** | 🟡 Medium | Hazelcast/Ignite distributed local |
+
+### 💡 Extension Opportunities
+
+| Extension | Potential | Description |
+|-----------|-----------|-------------|
+| **Algorithm Extensions** | ⭐⭐⭐⭐⭐ | Pluggable algorithm SPI for custom implementations |
+| **Storage SPI** | ⭐⭐⭐⭐⭐ | Generic StorageProvider interface for new backends |
+| **WebFlux Support** | ⭐⭐⭐⭐ | Reactive programming support for Spring WebFlux |
+| **Quarkus/Micronaut** | ⭐⭐⭐ | Framework-agnostic core module |
+| **Kubernetes HPA** | ⭐⭐⭐ | Horizontal Pod Autoscaler integration metrics |
+| **Service Mesh** | ⭐⭐⭐ | Istio/Envoy rate limit adapter |
+| **GraphQL Rate Limiting** | ⭐⭐⭐ | Field-level rate limiting for GraphQL APIs |
+| **WebSocket Rate Limiting** | ⭐⭐⭐ | Connection and message rate limiting |
+| **gRPC Interceptor** | ⭐⭐⭐ | Native gRPC rate limit interceptor |
+| **Spring Security Integration** | ⭐⭐⭐⭐ | Security context-based rate limiting |
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please follow these steps:
@@ -444,6 +526,27 @@ mvn clean install
 # Run tests
 mvn test
 ```
+
+### Testing Contributions Needed
+
+The project currently has limited test coverage. We welcome contributions in:
+
+```bash
+# Run existing tests
+mvn test -pl ratelimit4j-local
+
+# Test areas that need contributions:
+# - ratelimit4j-local/src/test/java/  (local algorithms)
+# - ratelimit4j-redis/src/test/java/  (redis algorithms)  
+# - ratelimit4j-spring-boot-starter/src/test/java/  (integration tests)
+```
+
+**Test Priority List:**
+1. Algorithm unit tests (all 5 algorithms for both engines)
+2. Dimension resolver tests (IP, User, Tenant, Device)
+3. Circuit breaker tests
+4. Key resolver tests (SpEL, Composite)
+5. Spring Boot integration tests
 
 ## 📄 License
 
